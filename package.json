@@ -1,0 +1,67 @@
+{
+  "name": "pipeline-core",
+  "version": "1.0.0",
+  "description": "A TypeScript library for managing complex data processing pipelines with advanced error handling and parallel processing capabilities",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run lint && npm test",
+    "version": "npm run format && git add -A src",
+    "postversion": "git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SEU_USUARIO/pipeline-core.git"
+  },
+  "keywords": [
+    "pipeline",
+    "typescript",
+    "node",
+    "async",
+    "processing",
+    "worker",
+    "parallel",
+    "error-handling"
+  ],
+  "author": "Vinicius Oliveira",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SEU_USUARIO/pipeline-core/issues"
+  },
+  "homepage": "https://github.com/SEU_USUARIO/pipeline-core#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "typescript": "^5.3.3",
+    "tsc-alias": "^1.8.8"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.0.0"
+  }
+}
