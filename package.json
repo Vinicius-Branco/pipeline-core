@@ -1,6 +1,6 @@
 {
   "name": "pipeline-core",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "A TypeScript library for managing complex data processing pipelines with advanced error handling and parallel processing capabilities",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
