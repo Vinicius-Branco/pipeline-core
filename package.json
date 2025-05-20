@@ -3,9 +3,8 @@
   "version": "1.0.4",
   "description": "A TypeScript library for managing complex data processing pipelines with advanced error handling and parallel processing capabilities",
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "type": "module",
+  "type": "commonjs",
   "files": [
     "dist",
     "README.md",
@@ -14,7 +13,6 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "require": "./dist/index.js"
     }
   },
