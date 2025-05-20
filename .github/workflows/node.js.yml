@@ -26,6 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install ESLint version based on Node version
+        if: matrix.node-version == '14.x'
+        run: npm install eslint@7.32.0 @typescript-eslint/eslint-plugin@5.59.0 @typescript-eslint/parser@5.59.0 --save-dev
+
       - name: Run linting
         run: npm run lint
 
