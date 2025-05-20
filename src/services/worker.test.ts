@@ -2,12 +2,12 @@ import { WorkerService } from "./worker";
 import { Worker } from "worker_threads";
 
 jest.mock("worker_threads", () => {
-  const events: Record<string, Function[]> = {};
+  const events: Record<string, Array<(...args: unknown[]) => void>> = {};
   class MockWorker {
-    static lastInstance: any;
+    static lastInstance: MockWorker;
     on: jest.Mock;
     terminate: jest.Mock;
-    constructor(path: string, opts: any) {
+    constructor(_path: string, _opts: unknown) {
       this.on = jest.fn((event, cb) => {
         events[event] = events[event] || [];
         events[event].push(cb);
@@ -15,7 +15,7 @@ jest.mock("worker_threads", () => {
       this.terminate = jest.fn();
       MockWorker.lastInstance = this;
     }
-    emit(event: string, ...args: any[]) {
+    emit(event: string, ...args: unknown[]) {
       (events[event] || []).forEach((cb) => cb(...args));
     }
   }
@@ -38,7 +38,9 @@ describe("WorkerService", () => {
   it("should execute a worker and resolve with result", async () => {
     const promise = workerService.runWorker(workerPath, { foo: "bar" });
     // Simulate worker message
-    const MockWorker: any = Worker;
+    const MockWorker = Worker as unknown as {
+      lastInstance: { emit: (event: string, data: unknown) => void };
+    };
     MockWorker.lastInstance.emit("message", { result: 42 });
     await expect(promise).resolves.toEqual({ result: 42 });
   });
@@ -51,7 +53,9 @@ describe("WorkerService", () => {
 
   it("should reject if worker emits error", async () => {
     const promise = workerService.runWorker(workerPath, { foo: "bar" });
-    const MockWorker: any = Worker;
+    const MockWorker = Worker as unknown as {
+      lastInstance: { emit: (event: string, error: Error) => void };
+    };
     MockWorker.lastInstance.emit("error", new Error("fail!"));
     await expect(promise).rejects.toThrow("fail!");
   });
@@ -62,7 +66,9 @@ describe("WorkerService", () => {
       workerService.runWorker(workerPath, { id: 2 }),
       workerService.runWorker(workerPath, { id: 3 }),
     ];
-    const MockWorker: any = Worker;
+    const MockWorker = Worker as unknown as {
+      lastInstance: { emit: (event: string, data: unknown) => void };
+    };
     // Complete all
     MockWorker.lastInstance.emit("message", { done: 1 });
     MockWorker.lastInstance.emit("message", { done: 2 });
