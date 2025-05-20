@@ -29,3 +29,6 @@ coverage/
 # Logs
 logs/
 *.log 
+
+# Test Usage
+test-usage/
