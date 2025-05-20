@@ -42,33 +42,6 @@ export interface PipelineOptions {
   };
 }
 
-export interface QueueMessage<T = any> {
-  topic: string;
-  payload: T;
-  timestamp?: Date;
-  key?: string;
-}
-
-export interface QueueConfig {
-  clientId: string;
-  groupId?: string;
-  brokers: string[];
-  ssl?: boolean;
-  sasl?: {
-    mechanism: string;
-    username: string;
-    password: string;
-  };
-}
-
-export interface PipelineConsumerConfig<TData = any> {
-  topic: string;
-  maxRetries?: number;
-  onSuccess?: (data: TData) => Promise<void>;
-  onError?: (data: TData, error: string) => Promise<void>;
-  onRetry?: (data: TData, retryCount: number, error: string) => Promise<void>;
-}
-
 export enum ErrorActionType {
   CONTINUE = "CONTINUE",
   STOP = "STOP",
@@ -101,9 +74,18 @@ export interface StepErrorHandler<TStep extends string> {
   onContinue?: (context: ErrorContext<TStep>) => Promise<void>;
 }
 
+// Constantes para tipos de eventos
+export const EVENT_TYPES = {
+  ERROR: "ERROR",
+  RETRY: "RETRY",
+  STOP: "STOP",
+} as const;
+
+export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
+
 // Tipos para eventos de erro
 export interface PipelineErrorEvent<TStep extends string, TData = any> {
-  type: "ERROR";
+  type: typeof EVENT_TYPES.ERROR;
   step: TStep;
   error: Error;
   data: TData;
@@ -111,14 +93,14 @@ export interface PipelineErrorEvent<TStep extends string, TData = any> {
 }
 
 export interface PipelineRetryEvent<TStep extends string, TData = any> {
-  type: "RETRY";
+  type: typeof EVENT_TYPES.RETRY;
   step: TStep;
   data: TData;
   context: ErrorContext<TStep, TData>;
 }
 
 export interface PipelineStopEvent<TStep extends string, TData = any> {
-  type: "STOP";
+  type: typeof EVENT_TYPES.STOP;
   step: TStep;
   data: TData;
   context: ErrorContext<TStep, TData>;

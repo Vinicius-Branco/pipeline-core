@@ -1,4 +1,5 @@
 export { PipelineService } from "./services/pipeline";
+export { ErrorActionType, EVENT_TYPES } from "./types";
 export type {
   PipelineConfig,
   PipelineStep,
@@ -7,10 +8,6 @@ export type {
   StepConfig,
   PipelineEvent,
   PipelineOptions,
-  QueueMessage,
-  QueueConfig,
-  PipelineConsumerConfig,
-  ErrorActionType,
   ErrorAction,
   ErrorContext,
   StepErrorHandler,
@@ -18,4 +15,5 @@ export type {
   PipelineRetryEvent,
   PipelineStopEvent,
   PipelineEventType,
+  EventType,
 } from "./types";
