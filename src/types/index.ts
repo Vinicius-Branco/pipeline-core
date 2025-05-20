@@ -61,7 +61,7 @@ export interface QueueConfig {
   };
 }
 
-export interface PipelineConsumerConfig<TStep extends string, TData = any> {
+export interface PipelineConsumerConfig<TData = any> {
   topic: string;
   maxRetries?: number;
   onSuccess?: (data: TData) => Promise<void>;

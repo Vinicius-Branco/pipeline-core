@@ -2,19 +2,9 @@ import { Worker } from "worker_threads";
 import { PipelineOptions } from "../types/index.js";
 import { retryWithBackoff } from "./retry";
 
-interface QueuedWorker<TInput, TResult> {
-  path: string;
-  data: TInput;
-  resolve: (value: TResult) => void;
-  reject: (reason?: any) => void;
-  retryCount: number;
-}
-
 export class WorkerService {
   private activeWorkers: Set<Worker> = new Set();
-  private workerQueue: QueuedWorker<any, any>[] = [];
   private readonly options: Required<PipelineOptions>;
-  private isProcessingQueue: boolean = false;
 
   constructor(options?: PipelineOptions) {
     this.options = {
@@ -25,45 +15,6 @@ export class WorkerService {
         backoffMs: 1000,
       },
     };
-  }
-
-  private async processQueue(): Promise<void> {
-    if (this.isProcessingQueue || this.workerQueue.length === 0) {
-      return;
-    }
-
-    this.isProcessingQueue = true;
-
-    try {
-      while (this.workerQueue.length > 0) {
-        const availableSlots =
-          this.options.maxConcurrentWorkers - this.activeWorkers.size;
-
-        if (availableSlots <= 0) {
-          // Wait for a worker to become available
-          await new Promise((resolve) => {
-            const checkInterval = setInterval(() => {
-              if (this.activeWorkers.size < this.options.maxConcurrentWorkers) {
-                clearInterval(checkInterval);
-                resolve(true);
-              }
-            }, 100);
-          });
-        }
-
-        const batch = this.workerQueue.splice(0, availableSlots);
-        await Promise.all(
-          batch.map((queuedWorker) =>
-            this.runWorker(queuedWorker.path, queuedWorker.data).then(
-              queuedWorker.resolve,
-              queuedWorker.reject
-            )
-          )
-        );
-      }
-    } finally {
-      this.isProcessingQueue = false;
-    }
   }
 
   private async executeWorker<TInput, TResult>(
@@ -119,11 +70,7 @@ export class WorkerService {
     return this.activeWorkers.size;
   }
 
-  getQueuedWorkersCount(): number {
-    return this.workerQueue.length;
-  }
-
   getTotalWorkersCount(): number {
-    return this.activeWorkers.size + this.workerQueue.length;
+    return this.activeWorkers.size;
   }
 }
