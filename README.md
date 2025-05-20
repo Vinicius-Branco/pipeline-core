@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/pipeline-core.svg)](https://www.npmjs.com/package/pipeline-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js CI](https://github.com/SEU_USUARIO/pipeline-core/actions/workflows/node.js.yml/badge.svg)](https://github.com/SEU_USUARIO/pipeline-core/actions/workflows/node.js.yml)
+[![Node.js CI](https://github.com/Vinicius-Branco/pipeline-core/actions/workflows/node.js.yml/badge.svg)](https://github.com/Vinicius-Branco/pipeline-core/actions/workflows/node.js.yml)
 
 A TypeScript library for managing complex data processing pipelines with advanced error handling, retry mechanisms, and parallel processing capabilities.
 

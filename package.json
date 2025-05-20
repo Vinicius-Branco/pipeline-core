@@ -29,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SEU_USUARIO/pipeline-core.git"
+    "url": "git+https://github.com/Vinicius-Branco/pipeline-core.git"
   },
   "keywords": [
     "pipeline",
@@ -44,9 +44,9 @@
   "author": "Vinicius Oliveira",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/SEU_USUARIO/pipeline-core/issues"
+    "url": "https://github.com/Vinicius-Branco/pipeline-core/issues"
   },
-  "homepage": "https://github.com/SEU_USUARIO/pipeline-core#readme",
+  "homepage": "https://github.com/Vinicius-Branco/pipeline-core#readme",
   "engines": {
     "node": ">=14.0.0"
   },
