@@ -20,8 +20,8 @@ const config: PipelineConfig<PipelineSteps> = {
     {
       name: "step1",
       handler: async (_data: { value: number }) => {
-        console.log("Executando step1 com função");
-        return Promise.reject(new Error("Erro no step1"));
+        console.log("Executing step1 with function");
+        return Promise.reject(new Error("Error in step1"));
         // return { ...data, value: data.value + 1 };
       },
       options: {
@@ -36,18 +36,18 @@ const config: PipelineConfig<PipelineSteps> = {
           error: Error,
           _context: ErrorContext
         ): Promise<ErrorAction> => {
-          console.log("Erro no step1:", error.message);
+          console.log("Error in step1:", error.message);
           return { type: ErrorActionType.RETRY, maxRetries: 2 };
         },
         onRetry: async (context: ErrorContext): Promise<void> => {
-          console.log(`Tentativa ${context.retryCount} no step1`);
+          console.log(`Attempt ${context.retryCount} in step1`);
         },
       },
     },
     {
       name: "step2",
       handler: async (data: { value: number }) => {
-        console.log("Executando step2 com função");
+        console.log("Executing step2 with function");
         return { ...data, value: data.value + 1 };
       },
       options: {
@@ -58,20 +58,20 @@ const config: PipelineConfig<PipelineSteps> = {
           error: Error,
           _context: ErrorContext
         ): Promise<ErrorAction> => {
-          console.log("Erro no step2:", error.message);
+          console.log("Error in step2:", error.message);
           return { type: ErrorActionType.CONTINUE, nextStep: "errorHandler" };
         },
         onContinue: async (_context: ErrorContext): Promise<void> => {
-          console.log("Pulando para errorHandler após erro no step2");
+          console.log("Skipping to errorHandler after error in step2");
         },
       },
     },
     {
       name: "step3",
       handler: async (data: { value: number }) => {
-        console.log("Executando step3 com função");
+        console.log("Executing step3 with function");
         if (data.value > 5) {
-          throw new Error("Valor muito alto!");
+          throw new Error("Value too high!");
         }
         return { ...data, value: data.value * 2 };
       },
@@ -80,27 +80,27 @@ const config: PipelineConfig<PipelineSteps> = {
           error: Error,
           _context: ErrorContext
         ): Promise<ErrorAction> => {
-          console.log("Erro no step3:", error.message);
+          console.log("Error in step3:", error.message);
           return {
             type: ErrorActionType.CUSTOM,
             handler: async (
               _error: Error,
               _context: ErrorContext
             ): Promise<ErrorAction> => {
-              console.log("Enviando para dead letter");
+              console.log("Sending to dead letter");
               return { type: ErrorActionType.STOP };
             },
           };
         },
         onStop: async (_context: ErrorContext): Promise<void> => {
-          console.log("Pipeline parada após erro no step3");
+          console.log("Pipeline stopped after error in step3");
         },
       },
     },
     {
       name: "errorHandler",
       handler: async (data: { value: number }) => {
-        console.log("Executando errorHandler com função");
+        console.log("Executing errorHandler with function");
         return { ...data, value: data.value + 1 };
       },
       errorHandlers: {
@@ -108,7 +108,7 @@ const config: PipelineConfig<PipelineSteps> = {
           error: Error,
           _context: ErrorContext
         ): Promise<ErrorAction> => {
-          console.log("Erro no errorHandler:", error.message);
+          console.log("Error in errorHandler:", error.message);
           return { type: ErrorActionType.STOP };
         },
       },
@@ -116,8 +116,8 @@ const config: PipelineConfig<PipelineSteps> = {
     {
       name: "deadLetter",
       handler: async (data: { value: number }) => {
-        console.log("Executando deadLetter com função");
-        console.log("Dados rejeitados:", data);
+        console.log("Executing deadLetter with function");
+        console.log("Rejected data:", data);
         return data;
       },
       errorHandlers: {
@@ -125,7 +125,7 @@ const config: PipelineConfig<PipelineSteps> = {
           error: Error,
           _context: ErrorContext
         ): Promise<ErrorAction> => {
-          console.log("Erro no deadLetter:", error.message);
+          console.log("Error in deadLetter:", error.message);
           return { type: ErrorActionType.STOP };
         },
       },
@@ -148,15 +148,13 @@ const pipeline = new PipelineService<PipelineSteps, { value: number }>(config);
 pipeline.onEvent((event) => {
   switch (event.type) {
     case "ERROR":
-      console.log(`Erro no passo ${event.step}:`, event.error.message);
+      console.log(`Error in step ${event.step}:`, event.error.message);
       break;
     case "RETRY":
-      console.log(
-        `Tentativa ${event.context.retryCount} no passo ${event.step}`
-      );
+      console.log(`Attempt ${event.context.retryCount} in step ${event.step}`);
       break;
     case "STOP":
-      console.log(`Pipeline parada no passo ${event.step}`);
+      console.log(`Pipeline stopped in step ${event.step}`);
       break;
   }
 });
@@ -169,9 +167,9 @@ async function runPipeline() {
       currentStep: "step1",
     });
 
-    console.log("Pipeline concluída:", result);
+    console.log("Pipeline completed:", result);
   } catch (error) {
-    console.error("Erro fatal na pipeline:", error);
+    console.error("Fatal error in pipeline:", error);
   }
 }
 

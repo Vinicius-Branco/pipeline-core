@@ -3,10 +3,10 @@ import { PipelineConfig } from "../types/index.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Define os passos da pipeline
+// Define pipeline steps
 type PipelineSteps = "step1" | "step2" | "step3";
 
-// Configuração da pipeline
+// Pipeline configuration
 const config: PipelineConfig<PipelineSteps> = {
   steps: [
     {
@@ -41,13 +41,13 @@ const config: PipelineConfig<PipelineSteps> = {
   },
 };
 
-// Cria a instância da pipeline
+// Create pipeline instance
 const pipeline = new PipelineService<PipelineSteps, { value: number }>(config);
 
-// Exemplo de uso
+// Usage example
 async function runPipeline() {
   try {
-    // Inicia a pipeline do primeiro passo
+    // Start pipeline from first step
     const result = await pipeline.execute([
       {
         data: { value: 1 },
@@ -55,17 +55,17 @@ async function runPipeline() {
       },
     ]);
 
-    console.log("Pipeline concluída:", result);
+    console.log("Pipeline completed:", result);
 
-    // Exemplo de reprocessamento a partir de um passo específico
+    // Example of reprocessing from a specific step
     const reprocessResult = await pipeline.execute({
       data: { value: 2 },
-      currentStep: "step2", // Começa do passo 2
+      currentStep: "step2", // Start from step 2
     });
 
-    console.log("Reprocessamento concluído:", reprocessResult);
+    console.log("Reprocessing completed:", reprocessResult);
   } catch (error) {
-    console.error("Erro na pipeline:", error);
+    console.error("Pipeline error:", error);
   }
 }
 
