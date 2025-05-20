@@ -75,7 +75,7 @@ export class PipelineService<TStep extends string, TData = any> {
   private async executeStep(
     step: TStep,
     data: TData,
-    retryCount: number = 0
+    retryCount = 0
   ): Promise<TData> {
     // Check if maximum steps limit is exceeded
     if (this.visitedSteps.size >= this.MAX_STEPS) {
