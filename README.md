@@ -28,8 +28,11 @@ npm install pipeline-core
 ## Basic Usage
 
 ```typescript
-import { PipelineService } from "pipeline-core";
-import { PipelineConfig, ErrorActionType } from "pipeline-core/types";
+import {
+  PipelineService,
+  PipelineConfig,
+  ErrorActionType,
+} from "pipeline-core";
 
 // Define pipeline steps
 type PipelineSteps = "step1" | "step2" | "step3";
