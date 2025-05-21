@@ -17,7 +17,8 @@ A TypeScript library for managing complex data processing pipelines with advance
 - 📊 Event-based monitoring
 - 🎯 Type-safe with TypeScript
 - 🔒 Infinite loop prevention
-- 📦 Zero dependencies
+- �� Zero dependencies
+- 📈 Integração com OpenTelemetry para observabilidade
 
 ## Installation
 
@@ -173,6 +174,55 @@ The library supports multiple error handling strategies:
 - `CONTINUE`: Skip to a specified next step
 - `STOP`: Halt pipeline execution
 - `CUSTOM`: Implement custom error handling logic
+
+## Integração com OpenTelemetry
+
+A biblioteca suporta integração com OpenTelemetry através de injeção de dependência. Para usar, você precisa:
+
+1. Instalar as dependências do OpenTelemetry:
+
+```bash
+npm install @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/exporter-jaeger @opentelemetry/resources @opentelemetry/semantic-conventions @opentelemetry/sdk-trace-base
+```
+
+2. Configurar o OpenTelemetry e injetar o tracer:
+
+```typescript
+import { trace } from "@opentelemetry/api";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { JaegerExporter } from "@opentelemetry/exporter-jaeger";
+import { Resource } from "@opentelemetry/resources";
+import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions";
+import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+
+// Configurar o OpenTelemetry
+const jaegerExporter = new JaegerExporter({
+  endpoint: "http://localhost:14268/api/traces",
+});
+
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: "pipeline-service",
+  }),
+  spanProcessor: new SimpleSpanProcessor(jaegerExporter),
+});
+
+await sdk.start();
+const tracer = trace.getTracer("pipeline-core");
+
+// Configurar o monitoramento da pipeline
+const monitoringConfig = {
+  telemetry: {
+    enabled: true,
+    tracer,
+  },
+  // ... outras configurações de monitoramento
+};
+
+pipeline.configureMonitoring(monitoringConfig);
+```
+
+A biblioteca irá automaticamente criar spans para cada etapa da pipeline, permitindo que você visualize o fluxo de execução no Jaeger ou em qualquer outro coletor de traces compatível com OpenTelemetry.
 
 ## Contributing
 
