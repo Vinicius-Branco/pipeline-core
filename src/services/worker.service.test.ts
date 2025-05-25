@@ -65,14 +65,13 @@ jest.mock("worker_threads", () => {
 });
 
 jest.mock("fs");
-jest.mock("typescript", () => ({
-  transpile: jest.fn().mockReturnValue("transpiled code"),
-  ScriptTarget: {
-    ES2018: "ES2018",
-  },
-  ModuleKind: {
-    CommonJS: "CommonJS",
-  },
+jest.mock("esbuild", () => ({
+  buildSync: jest.fn().mockImplementation((options) => {
+    // Simula o comportamento do esbuild
+    const { stdin, outfile } = options;
+    writeFileSync(outfile, stdin.contents);
+    return { errors: [], warnings: [] };
+  }),
 }));
 
 function waitForWorkerInstance(timeout = 50): Promise<any> {

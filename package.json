@@ -62,5 +62,8 @@
     "ts-jest": "^29.3.4",
     "tsc-alias": "^1.8.8",
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.4"
   }
 }

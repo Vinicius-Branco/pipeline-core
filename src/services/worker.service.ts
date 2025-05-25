@@ -4,8 +4,9 @@ import { retryWithBackoff } from "./retry.service";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { transpile, ScriptTarget, ModuleKind } from "typescript";
 import { Semaphore } from "./semaphore.service";
+import { buildSync } from "esbuild";
+import { delimiter } from "path";
 
 interface WorkerError {
   error: string;
@@ -62,64 +63,58 @@ export class WorkerService {
   ): Promise<TResult> {
     let tempFile: string | undefined;
 
-    // if handler is a function, creates a temporary worker
     if (typeof handler === "function") {
-      tempFile = join(tmpdir(), `worker-${Date.now()}.js`);
+      tempFile = join(tmpdir(), `worker-${Date.now()}-${Math.random()}.js`);
+      const handlerCode = this.serializeHandler(handler);
+
       const workerCode = `
-        const { parentPort, workerData } = require("worker_threads");
+          const { parentPort, workerData } = require("worker_threads");
 
-        // TypeScript helpers
-        var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-          function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-          return new (P || (P = Promise))(function (resolve, reject) {
-            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-            step((generator = generator.apply(thisArg, _arguments || [])).next());
+          const handler = ${handlerCode};
+
+          parentPort?.on('message', (message) => {
+            if (message === 'abort') {
+              // Aborting is managed within the handler
+            }
           });
-        };
 
-        const handler = ${this.serializeHandler(handler)};
+          (async () => {
+            try {
+              const abortController = new AbortController();
+              const signal = abortController.signal;
 
-        async function runWorker() {
-          try {
-            const abortController = new AbortController();
-            const signal = abortController.signal;
-
-            parentPort?.on('message', (message) => {
-              if (message === 'abort') {
-                abortController.abort();
-              }
-            });
-
-            const result = await handler(workerData, { signal });
-            parentPort?.postMessage(result);
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              parentPort?.postMessage({ error: 'Worker aborted' });
-            } else {
+              const result = await handler(workerData, { signal });
+              parentPort?.postMessage(result);
+            } catch (error) {
               parentPort?.postMessage({ error: error?.message || String(error) });
             }
-          }
-        }
+          })();
+`;
 
-        runWorker();
-      `;
-
-      // Verifica se precisa transpilar
       const shouldTranspile =
         this.options.transpileAlways || this.isTypeScript(workerCode);
-      const finalCode = shouldTranspile
-        ? transpile(workerCode, {
-            target: ScriptTarget.ES2018,
-            module: ModuleKind.CommonJS,
-            esModuleInterop: true,
-            importHelpers: false,
-            noEmitHelpers: true,
-          })
-        : workerCode;
 
-      writeFileSync(tempFile, finalCode);
+      if (shouldTranspile) {
+        buildSync({
+          stdin: {
+            contents: workerCode,
+            resolveDir: process.cwd(),
+            sourcefile: "worker.ts",
+            loader: "ts",
+          },
+          bundle: true,
+          platform: "node",
+          target: "es2018",
+          outfile: tempFile,
+          format: "cjs",
+          external: ["worker_threads"],
+          minify: false,
+          sourcemap: false,
+        });
+      } else {
+        writeFileSync(tempFile, workerCode);
+      }
+
       this.tempFiles.add(tempFile);
       handler = tempFile;
     }
@@ -127,9 +122,17 @@ export class WorkerService {
     return new Promise<TResult>((resolve, reject) => {
       const worker = new Worker(handler as string, {
         workerData: data,
+        env: {
+          ...process.env,
+          NODE_PATH: process.env.NODE_PATH
+            ? `${
+                process.env.NODE_PATH
+              }${delimiter}${process.cwd()}/node_modules`
+            : `${process.cwd()}/node_modules`,
+        },
       });
 
-      let timeout: NodeJS.Timeout;
+      let timeout: NodeJS.Timeout | undefined;
       let isResolved = false;
 
       const cleanup = () => {

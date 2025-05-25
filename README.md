@@ -144,6 +144,67 @@ const config: PipelineConfig<"step1"> = {
 };
 ```
 
+### Handling External Dependencies in Workers
+
+When using function handlers in your pipeline steps, it's important to note that the `worker_threads` module requires all code to be serialized into a file before execution. This means that any external dependencies need to be explicitly required within the handler function:
+
+```typescript
+const config: PipelineConfig<"step1"> = {
+  steps: [
+    {
+      name: "step1",
+      handler: async (data) => {
+        // External dependencies must be required inside the handler
+        const axios = require("axios");
+
+        const response = await axios.get("https://api.example.com/data");
+        return { ...data, apiData: response.data };
+      },
+    },
+  ],
+};
+```
+
+This approach is necessary because:
+
+1. The worker thread runs in an isolated context
+2. The handler function is serialized into a temporary file
+3. Dependencies need to be explicitly loaded within the worker's context
+4. The worker needs to have access to all required modules at runtime
+
+### Handling Internal Module Imports
+
+When importing internal modules (files from your project), you need to handle the default exports correctly. Here's an example:
+
+```typescript
+// requester.ts
+import axios from "axios";
+
+const requester = async () => {
+  const response = await axios.get("https://api.example.com/data");
+  return response;
+};
+
+export default requester;
+
+// pipeline.ts
+const config: PipelineConfig<"step1"> = {
+  steps: [
+    {
+      name: "step1",
+      handler: async (data) => {
+        // Access the default export using .default
+        const requester = require("./requester").default;
+        const response = await requester();
+        return { ...data, apiData: response.data };
+      },
+    },
+  ],
+};
+```
+
+Note that when using `require()` with ES modules that have default exports, you need to access the `default` property to get the exported function or value.
+
 ## Configuration
 
 ### PipelineConfig
