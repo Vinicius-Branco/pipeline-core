@@ -74,7 +74,7 @@ export interface StepErrorHandler<TStep extends string> {
   onContinue?: (context: ErrorContext<TStep>) => Promise<void>;
 }
 
-// Constantes para tipos de eventos
+// Constants for event types
 export const EVENT_TYPES = {
   ERROR: "ERROR",
   RETRY: "RETRY",
@@ -83,7 +83,7 @@ export const EVENT_TYPES = {
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
 
-// Tipos para eventos de erro
+// Types for error events
 export interface PipelineErrorEvent<TStep extends string, TData = any> {
   type: typeof EVENT_TYPES.ERROR;
   step: TStep;

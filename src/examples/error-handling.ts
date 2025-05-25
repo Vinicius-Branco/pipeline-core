@@ -6,7 +6,7 @@ import {
   ErrorActionType,
 } from "../types/index.js";
 
-// Define os passos da pipeline
+// Define the steps of the pipeline
 type PipelineSteps =
   | "step1"
   | "step2"
@@ -14,15 +14,14 @@ type PipelineSteps =
   | "errorHandler"
   | "deadLetter";
 
-// Configuração da pipeline com handlers de erro integrados
+// Pipeline configuration with built-in error handlers
 const config: PipelineConfig<PipelineSteps> = {
   steps: [
     {
       name: "step1",
-      handler: async (_data: { value: number }) => {
+      handler: async (data: { value: number }) => {
         console.log("Executing step1 with function");
-        return Promise.reject(new Error("Error in step1"));
-        // return { ...data, value: data.value + 1 };
+        return { ...data, value: data.value + 1 };
       },
       options: {
         workerTimeout: 10000,
@@ -141,10 +140,10 @@ const config: PipelineConfig<PipelineSteps> = {
   },
 };
 
-// Cria a instância da pipeline
+// Create pipeline instance
 const pipeline = new PipelineService<PipelineSteps, { value: number }>(config);
 
-// Adiciona listener para eventos
+// Add listener for events
 pipeline.onEvent((event) => {
   switch (event.type) {
     case "ERROR":
@@ -159,7 +158,7 @@ pipeline.onEvent((event) => {
   }
 });
 
-// Exemplo de uso
+// Example of usage
 async function runPipeline() {
   try {
     const result = await pipeline.execute({
