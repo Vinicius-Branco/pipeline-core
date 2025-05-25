@@ -30,7 +30,9 @@ const config: PipelineConfig<PipelineSteps> = {
 };
 
 // Create pipeline instance
-const pipeline = new PipelineService<PipelineSteps, {}>(config);
+const pipeline = new PipelineService<PipelineSteps, Record<string, unknown>>(
+  config
+);
 
 // Example of usage
 async function runPipeline() {
