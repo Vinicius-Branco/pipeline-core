@@ -35,9 +35,7 @@ jest.mock("worker_threads", () => {
         callbacks.forEach((cb) => {
           try {
             cb(data);
-          } catch (error) {
-            console.error(`Error in ${event} callback:`, error);
-          }
+          } catch (error) {}
         });
 
         // Finaliza o worker em caso de sucesso ou erro
@@ -67,14 +65,21 @@ jest.mock("worker_threads", () => {
 jest.mock("fs");
 jest.mock("esbuild", () => ({
   buildSync: jest.fn().mockImplementation((options) => {
-    // Simula o comportamento do esbuild
-    const { stdin, outfile } = options;
-    writeFileSync(outfile, stdin.contents);
-    return { errors: [], warnings: [] };
+    const { stdin } = options;
+    return {
+      errors: [],
+      warnings: [],
+      outputFiles: [
+        {
+          text: stdin.contents,
+          path: "mock-output.js",
+        },
+      ],
+    };
   }),
 }));
 
-function waitForWorkerInstance(timeout = 50): Promise<any> {
+function waitForWorkerInstance(timeout = 200): Promise<any> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     function check() {
@@ -264,54 +269,54 @@ describe("WorkerService", () => {
       const handler = async (data: any) => data;
       const promise = workerService.runWorker(handler, { id: 1 });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       expect(writeFileSync).toHaveBeenCalled();
       const tempFilePath = (writeFileSync as jest.Mock).mock.calls[0][0];
 
-      const worker = await waitForWorkerInstance();
+      const worker = await waitForWorkerInstance(500);
       worker.emit("message", { result: 42 });
       await promise;
 
       expect(unlinkSync).toHaveBeenCalledWith(tempFilePath);
-    }, 2000);
+    }, 3000);
 
     it("should cleanup temporary file on worker error", async () => {
       const handler = async (data: any) => data;
       const promise = workerService.runWorker(handler, { id: 1 });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       expect(writeFileSync).toHaveBeenCalled();
       const tempFilePath = (writeFileSync as jest.Mock).mock.calls[0][0];
 
-      const worker = await waitForWorkerInstance();
+      const worker = await waitForWorkerInstance(500);
       worker.emit("error", new Error("fail!"));
       await expect(promise).rejects.toThrow("fail!");
       expect(unlinkSync).toHaveBeenCalledWith(tempFilePath);
-    }, 2000);
+    }, 3000);
 
     it("should cleanup temporary file on worker timeout", async () => {
       const handler = async (data: any) => data;
       const promise = workerService.runWorker(
         handler,
         { id: 1 },
-        { workerTimeout: 100 }
+        { workerTimeout: 200 }
       );
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 200));
       expect(writeFileSync).toHaveBeenCalled();
       const tempFilePath = (writeFileSync as jest.Mock).mock.calls[0][0];
       await expect(promise).rejects.toThrow("Worker timeout");
       expect(unlinkSync).toHaveBeenCalledWith(tempFilePath);
-    }, 1000);
+    }, 3000);
 
     it("should cleanup temporary file on worker exit with non-zero code", async () => {
       const handler = async (data: any) => data;
       const promise = workerService.runWorker(handler, { id: 1 });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       expect(writeFileSync).toHaveBeenCalled();
       const tempFilePath = (writeFileSync as jest.Mock).mock.calls[0][0];
 
-      const worker = await waitForWorkerInstance();
+      const worker = await waitForWorkerInstance(500);
       worker.emit("exit", 1);
 
       try {

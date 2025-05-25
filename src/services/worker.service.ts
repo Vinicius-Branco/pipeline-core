@@ -7,6 +7,7 @@ import { tmpdir } from "os";
 import { Semaphore } from "./semaphore.service";
 import { buildSync } from "esbuild";
 import { delimiter } from "path";
+import path from "path";
 
 interface WorkerError {
   error: string;
@@ -95,22 +96,42 @@ export class WorkerService {
         this.options.transpileAlways || this.isTypeScript(workerCode);
 
       if (shouldTranspile) {
-        buildSync({
+        const result = buildSync({
           stdin: {
             contents: workerCode,
-            resolveDir: process.cwd(),
-            sourcefile: "worker.ts",
             loader: "ts",
+            resolveDir: process.cwd(),
           },
           bundle: true,
           platform: "node",
           target: ["node16"],
-          outfile: tempFile,
           format: "cjs",
           external: ["worker_threads"],
-          minify: false,
+          minify: true,
           sourcemap: false,
+          logLevel: "silent",
+          define: {
+            "process.env.NODE_ENV": '"production"',
+          },
+          inject: [
+            path.join(
+              __dirname,
+              "..",
+              "..",
+              "node_modules",
+              "tslib",
+              "tslib.js"
+            ),
+          ],
+          metafile: false,
+          treeShaking: true,
         });
+
+        if (!result.outputFiles?.[0]?.text) {
+          throw new Error("Failed to build worker code");
+        }
+
+        writeFileSync(tempFile, result.outputFiles[0].text);
       } else {
         writeFileSync(tempFile, workerCode);
       }

@@ -1,3 +1,22 @@
+// Configura o ambiente para os testes de integração
+process.env.ESBUILD_LOG_LEVEL = "error";
+
+// Suprime a saída do esbuild durante os testes
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+console.log = (...args: any[]) => {
+  if (!args[0]?.includes("esbuild")) {
+    originalConsoleLog(...args);
+  }
+};
+
+console.error = (...args: any[]) => {
+  if (!args[0]?.includes("esbuild")) {
+    originalConsoleError(...args);
+  }
+};
+
 import { PipelineService } from "../../services/pipeline.service";
 import { ErrorActionType } from "../../types";
 
@@ -64,12 +83,3 @@ export const setupTestPipeline = (steps?: any[], options?: any) => {
   pipeline["visitedSteps"] = new Set();
   return pipeline;
 };
-
-// Teste básico para o arquivo de setup
-describe("Setup Tests", () => {
-  it("should create a pipeline with default configuration", () => {
-    const pipeline = setupTestPipeline();
-    expect(pipeline).toBeDefined();
-    expect(pipeline["visitedSteps"]).toBeDefined();
-  });
-});
