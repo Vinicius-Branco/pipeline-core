@@ -207,4 +207,18 @@ export class WorkerService {
   getCurrentConcurrency(): number {
     return this.semaphore.getCurrentConcurrency();
   }
+
+  async cleanup(): Promise<void> {
+    // Limpa todos os workers finalizados
+    for (const worker of this.finalizedWorkers) {
+      worker.terminate();
+    }
+    this.finalizedWorkers.clear();
+
+    // Limpa todos os arquivos temporários
+    for (const tempFile of this.tempFiles) {
+      this.cleanupTempFile(tempFile);
+    }
+    this.tempFiles.clear();
+  }
 }

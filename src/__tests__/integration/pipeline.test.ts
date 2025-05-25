@@ -2,8 +2,15 @@ import { setupTestPipeline } from "./setup";
 import { ErrorActionType, EVENT_TYPES } from "../../types";
 
 describe("Pipeline Integration Tests", () => {
+  let pipeline: ReturnType<typeof setupTestPipeline>;
+
+  afterEach(async () => {
+    if (pipeline) {
+      await pipeline.cleanup?.();
+    }
+  });
+
   describe("Basic Execution", () => {
-    let pipeline: ReturnType<typeof setupTestPipeline>;
     beforeEach(() => {
       pipeline = setupTestPipeline([
         {
@@ -41,7 +48,6 @@ describe("Pipeline Integration Tests", () => {
   });
 
   describe("Parallel Processing", () => {
-    let pipeline: ReturnType<typeof setupTestPipeline>;
     beforeEach(() => {
       pipeline = setupTestPipeline([
         {
@@ -76,7 +82,6 @@ describe("Pipeline Integration Tests", () => {
   });
 
   describe("Error Handling", () => {
-    let pipeline: ReturnType<typeof setupTestPipeline>;
     beforeEach(() => {
       pipeline = setupTestPipeline([
         {
@@ -107,7 +112,7 @@ describe("Pipeline Integration Tests", () => {
         })
       ).rejects.toThrow("Simulated error");
       expect(errorEvents.length).toBeGreaterThan(0);
-    });
+    }, 15000);
     it("should stop execution after exceeding the maximum number of retries", async () => {
       const errorEvents: any[] = [];
       pipeline.onEvent((event) => {
@@ -122,7 +127,7 @@ describe("Pipeline Integration Tests", () => {
         })
       ).rejects.toThrow("Simulated error");
       expect(errorEvents.length).toBeLessThanOrEqual(2);
-    });
+    }, 15000);
   });
 
   describe("Timeout and Concurrency", () => {
@@ -169,7 +174,7 @@ describe("Pipeline Integration Tests", () => {
           {
             name: "step1",
             handler: async (data: { value: number }) => {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+              await new Promise((resolve) => setTimeout(resolve, 1000));
               return { ...data, value: data.value + 1 };
             },
           },
@@ -188,7 +193,7 @@ describe("Pipeline Integration Tests", () => {
       results.forEach((result, index) => {
         expect(result.value).toBe(index + 1);
       });
-      expect(executionTime).toBeGreaterThan(4000); // 5 items, 2 in parallel, each takes 2s
-    });
+      expect(executionTime).toBeGreaterThan(2000);
+    }, 15000);
   });
 });

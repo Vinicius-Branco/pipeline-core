@@ -64,3 +64,12 @@ export const setupTestPipeline = (steps?: any[], options?: any) => {
   pipeline["visitedSteps"] = new Set();
   return pipeline;
 };
+
+// Teste básico para o arquivo de setup
+describe("Setup Tests", () => {
+  it("should create a pipeline with default configuration", () => {
+    const pipeline = setupTestPipeline();
+    expect(pipeline).toBeDefined();
+    expect(pipeline["visitedSteps"]).toBeDefined();
+  });
+});

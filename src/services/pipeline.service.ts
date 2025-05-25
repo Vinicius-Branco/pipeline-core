@@ -306,6 +306,12 @@ export class PipelineService<TStep extends string, TData = any> {
     this.eventListeners.push(listener);
   }
 
+  public async cleanup(): Promise<void> {
+    await this.workerService.cleanup();
+    this.eventListeners = [];
+    this.visitedSteps.clear();
+  }
+
   private notifyEventListeners(event: PipelineEventType<TStep, TData>): void {
     this.eventListeners.forEach((listener) => listener(event));
   }
