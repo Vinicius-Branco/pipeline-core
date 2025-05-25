@@ -1,4 +1,3 @@
-import { Worker } from "worker_threads";
 import {
   PipelineConfig,
   PipelineEvent,
@@ -9,67 +8,68 @@ import {
   ErrorActionType,
   StepOptions,
   StepHandler,
+  EVENT_TYPES,
 } from "../types";
+import { MonitoringService } from "./monitoring.service";
+import { WorkerService } from "./worker.service";
 
 export class PipelineService<TStep extends string, TData = any> {
   private config: PipelineConfig<TStep>;
   private eventListeners: ((event: PipelineEventType<TStep, TData>) => void)[] =
     [];
   private visitedSteps: Set<string> = new Set();
-  private readonly MAX_STEPS = 1000; // Maximum steps limit to prevent infinite loops
+  private monitoring: MonitoringService;
+  private workerService: WorkerService;
 
   constructor(config: PipelineConfig<TStep>) {
     this.config = config;
+    this.monitoring = MonitoringService.getInstance();
+    this.workerService = new WorkerService(config.options);
+    this.setupEventPropagation();
+  }
+
+  private setupEventPropagation(): void {
+    this.monitoring.onEvent((event) => {
+      const step = event.step as TStep;
+      this.notifyEventListeners({
+        type: event.type,
+        step,
+        duration: event.duration,
+        timestamp: event.timestamp,
+        data: event.data,
+        context: {
+          step,
+          data: event.data as TData,
+          retryCount: event.context?.attempt || 0,
+          pipelineState: {
+            currentStep: step,
+            steps: this.config.steps.map((s) => s.name),
+          },
+        },
+      });
+    });
   }
 
   private getStepOptions(stepConfig: StepConfig<TStep>): StepOptions {
+    // prioritize step's retryStrategy over global if it exists
+    const globalRetry = this.config.options?.retryStrategy;
+    const stepRetry = stepConfig.options?.retryStrategy;
+    const retryStrategy = stepRetry !== undefined ? stepRetry : globalRetry;
+
     return {
       ...this.config.options,
       ...stepConfig.options,
-      retryStrategy: {
-        ...this.config.options?.retryStrategy,
-        ...stepConfig.options?.retryStrategy,
-      },
+      retryStrategy,
     };
   }
 
   private async executeHandler(
     handler: StepHandler<TData>,
-    data: TData
+    data: TData,
+    stepOptions?: StepOptions
   ): Promise<TData> {
-    if (typeof handler === "function") {
-      return handler(data);
-    }
-
-    // If it's a string, assume it's a file path
-    const worker = new Worker(handler);
-
-    try {
-      return await new Promise<TData>((resolve, reject) => {
-        const messageHandler = (result: TData) => {
-          cleanup();
-          resolve(result);
-        };
-
-        const errorHandler = (error: Error) => {
-          cleanup();
-          reject(error);
-        };
-
-        const cleanup = () => {
-          worker.removeListener("message", messageHandler);
-          worker.removeListener("error", errorHandler);
-          worker.terminate();
-        };
-
-        worker.on("message", messageHandler);
-        worker.on("error", errorHandler);
-        worker.postMessage(data);
-      });
-    } catch (error) {
-      worker.terminate();
-      throw error;
-    }
+    // always use WorkerService to ensure consistent handling of timeouts and concurrency
+    return this.workerService.runWorker(handler, data, stepOptions);
   }
 
   private async executeStep(
@@ -77,13 +77,6 @@ export class PipelineService<TStep extends string, TData = any> {
     data: TData,
     retryCount = 0
   ): Promise<TData> {
-    // Check if maximum steps limit is exceeded
-    if (this.visitedSteps.size >= this.MAX_STEPS) {
-      throw new Error(
-        "Maximum steps limit exceeded. Possible infinite loop detected."
-      );
-    }
-
     // Add current step to visited steps
     this.visitedSteps.add(step);
 
@@ -95,7 +88,12 @@ export class PipelineService<TStep extends string, TData = any> {
     const stepOptions = this.getStepOptions(stepConfig);
 
     try {
-      return await this.executeHandler(stepConfig.handler, data);
+      const result = await this.monitoring.trackStep(
+        step,
+        () => this.executeHandler(stepConfig.handler, data, stepOptions),
+        { pipelineId: "pipeline", executionId: "1", attempt: retryCount + 1 }
+      );
+      return result;
     } catch (error) {
       if (stepConfig.errorHandlers?.onError) {
         const context: ErrorContext<TStep, TData> = {
@@ -232,11 +230,13 @@ export class PipelineService<TStep extends string, TData = any> {
         );
         currentStep = this.config.steps[currentIndex + 1]?.name;
       } catch (error) {
-        this.notifyEventListeners({
-          type: "ERROR",
+        const event: PipelineEventType<TStep, TData> = {
+          type: EVENT_TYPES.ERROR,
           step: currentStep,
           error: error as Error,
           data: currentData,
+          duration: 0,
+          timestamp: Date.now(),
           context: {
             step: currentStep,
             data: currentData,
@@ -247,7 +247,8 @@ export class PipelineService<TStep extends string, TData = any> {
               steps: this.config.steps.map((s) => s.name),
             },
           },
-        });
+        };
+        this.notifyEventListeners(event);
         throw error;
       }
     }
@@ -264,7 +265,7 @@ export class PipelineService<TStep extends string, TData = any> {
       const errors: Error[] = [];
 
       // Process items in batches to avoid memory issues
-      const batchSize = this.config.options?.maxConcurrentWorkers || 10;
+      const batchSize = this.config.options?.maxConcurrentWorkers || 2;
 
       for (let i = 0; i < input.length; i += batchSize) {
         const batch = input.slice(i, i + batchSize);

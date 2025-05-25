@@ -3,13 +3,15 @@ export interface PipelineStep<TData = any> {
   execute(data: TData): Promise<TData>;
 }
 
+export interface RetryStrategy {
+  maxRetries: number;
+  backoffMs: number;
+}
+
 export interface StepOptions {
   workerTimeout?: number;
   maxConcurrentWorkers?: number;
-  retryStrategy?: {
-    maxRetries?: number;
-    backoffMs?: number;
-  };
+  retryStrategy?: RetryStrategy;
 }
 
 export type StepHandler<TData = any> =
@@ -36,10 +38,8 @@ export interface PipelineEvent<TStep extends string, TData = any> {
 export interface PipelineOptions {
   workerTimeout?: number;
   maxConcurrentWorkers?: number;
-  retryStrategy?: {
-    maxRetries: number;
-    backoffMs: number;
-  };
+  retryStrategy?: RetryStrategy;
+  transpileAlways?: boolean;
 }
 
 export enum ErrorActionType {
@@ -106,7 +106,21 @@ export interface PipelineStopEvent<TStep extends string, TData = any> {
   context: ErrorContext<TStep, TData>;
 }
 
-export type PipelineEventType<TStep extends string, TData = any> =
-  | PipelineErrorEvent<TStep, TData>
-  | PipelineRetryEvent<TStep, TData>
-  | PipelineStopEvent<TStep, TData>;
+export interface PipelineEventType<TStep extends string, TData = any> {
+  type: string;
+  step: TStep;
+  data: TData;
+  duration: number;
+  timestamp: number;
+  error?: Error;
+  context: {
+    step: TStep;
+    data: TData;
+    error?: Error;
+    retryCount: number;
+    pipelineState: {
+      currentStep: TStep;
+      steps: TStep[];
+    };
+  };
+}

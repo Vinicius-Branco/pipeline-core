@@ -1,9 +1,10 @@
-import { PipelineService } from "../services/pipeline.js";
+import { PipelineService } from "../services/pipeline.service.js";
 import {
   PipelineConfig,
   ErrorAction,
   ErrorContext,
   ErrorActionType,
+  EVENT_TYPES,
 } from "../types/index.js";
 
 // Define the steps of the pipeline
@@ -145,16 +146,8 @@ const pipeline = new PipelineService<PipelineSteps, { value: number }>(config);
 
 // Add listener for events
 pipeline.onEvent((event) => {
-  switch (event.type) {
-    case "ERROR":
-      console.log(`Error in step ${event.step}:`, event.error.message);
-      break;
-    case "RETRY":
-      console.log(`Attempt ${event.context.retryCount} in step ${event.step}`);
-      break;
-    case "STOP":
-      console.log(`Pipeline stopped in step ${event.step}`);
-      break;
+  if (event.type === EVENT_TYPES.ERROR && event.error) {
+    console.log(`Error in step ${event.step}:`, event.error.message);
   }
 });
 

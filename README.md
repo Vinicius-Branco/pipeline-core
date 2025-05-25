@@ -18,6 +18,9 @@ A TypeScript library for managing complex data processing pipelines with advance
 - 🎯 Type-safe with TypeScript
 - 🔒 Infinite loop prevention
 - 🚫 Zero dependencies
+- 👥 Worker thread support for heavy processing
+- 📈 Detailed performance monitoring
+- 🔄 Per-step customizable retry strategies
 
 ## Installation
 
@@ -126,6 +129,21 @@ const results = await pipeline.execute([
 ]);
 ```
 
+### Worker Threads
+
+Execute heavy processing in separate threads:
+
+```typescript
+const config: PipelineConfig<"step1"> = {
+  steps: [
+    {
+      name: "step1",
+      handler: "./worker.js", // Path to worker file
+    },
+  ],
+};
+```
+
 ## Configuration
 
 ### PipelineConfig
@@ -162,6 +180,8 @@ interface StepOptions {
     maxRetries: number; // Default: 3
     backoffMs: number; // Default: 1000
   };
+  workerTimeout?: number; // Worker timeout
+  transpileAlways?: boolean; // Always transpile workers
 }
 ```
 

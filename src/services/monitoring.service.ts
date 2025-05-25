@@ -1,23 +1,12 @@
-import { randomUUID } from "crypto";
-import {
-  MonitoringConfig,
-  PipelineEvent,
-  PipelineLog,
-} from "../types/monitoring";
+import { PipelineEvent, MonitoringEvent } from "../types/monitoring";
 
 export class MonitoringService {
   private static instance: MonitoringService;
   private eventListeners: Array<(event: PipelineEvent) => void> = [];
-  private logs: PipelineLog[] = [];
-  private config: MonitoringConfig;
 
-  private constructor(config: MonitoringConfig) {
-    this.config = config;
-  }
-
-  public static getInstance(config: MonitoringConfig): MonitoringService {
+  public static getInstance(): MonitoringService {
     if (!MonitoringService.instance) {
-      MonitoringService.instance = new MonitoringService(config);
+      MonitoringService.instance = new MonitoringService();
     }
     return MonitoringService.instance;
   }
@@ -35,55 +24,33 @@ export class MonitoringService {
     handler: () => Promise<T>,
     context: { pipelineId: string; executionId: string; attempt: number }
   ): Promise<T> {
+    const startTime = Date.now();
     try {
       const result = await handler();
+      const duration = Date.now() - startTime;
 
       this.emitEvent({
-        type: "STEP_END",
+        type: MonitoringEvent.STEP_END,
         timestamp: Date.now(),
-        stepName,
+        duration,
+        step: stepName,
         context,
+        data: result,
       });
 
       return result;
     } catch (error: unknown) {
+      const duration = Date.now() - startTime;
       this.emitEvent({
-        type: "STEP_ERROR",
+        type: MonitoringEvent.STEP_ERROR,
         timestamp: Date.now(),
-        stepName,
+        duration,
+        step: stepName,
         context,
         data: error,
       });
 
       throw error;
     }
-  }
-
-  public log(
-    level: "debug" | "info" | "warn" | "error",
-    message: string,
-    context: any
-  ): void {
-    const logEntry: PipelineLog = {
-      level,
-      message,
-      timestamp: Date.now(),
-      context: {
-        pipelineId: context.pipelineId || "unknown",
-        stepName: context.stepName || "unknown",
-        executionId: context.executionId || randomUUID(),
-      },
-      metadata: context,
-    };
-
-    this.logs.push(logEntry);
-
-    if (this.config.logging?.destination === "console") {
-      console[level](JSON.stringify(logEntry));
-    }
-  }
-
-  public getLogs(): PipelineLog[] {
-    return this.logs;
   }
 }

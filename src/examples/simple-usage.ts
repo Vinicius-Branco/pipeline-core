@@ -1,4 +1,4 @@
-import { PipelineService } from "../services/pipeline.js";
+import { PipelineService } from "../services/pipeline.service.js";
 import { PipelineConfig } from "../types/index.js";
 import os from "os";
 
@@ -11,14 +11,14 @@ const config: PipelineConfig<PipelineSteps> = {
     {
       name: "step1",
       handler: async (data) => {
-        console.log("Executing step1 with function");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return { ...data, step1: "completed" };
       },
     },
     {
       name: "step2",
       handler: async (data) => {
-        console.log("Executing step2 with function");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return { ...data, step2: "completed" };
       },
     },
@@ -26,6 +26,7 @@ const config: PipelineConfig<PipelineSteps> = {
   options: {
     // Using system's CPU count to optimize parallel processing
     maxConcurrentWorkers: os.cpus().length,
+    workerTimeout: 30000, // 30 segundos de timeout
   },
 };
 
@@ -33,6 +34,17 @@ const config: PipelineConfig<PipelineSteps> = {
 const pipeline = new PipelineService<PipelineSteps, Record<string, unknown>>(
   config
 );
+
+// Subscribe to pipeline events
+pipeline.onEvent((event) => {
+  console.log("Event:", {
+    type: event.type,
+    step: event.step,
+    duration: event.duration,
+    timestamp: new Date(event.timestamp).toISOString(),
+    context: event.context,
+  });
+});
 
 // Example of usage
 async function runPipeline() {

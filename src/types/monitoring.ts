@@ -1,15 +1,13 @@
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export enum MonitoringEvent {
+  STEP_END = "STEP_END",
+  STEP_ERROR = "STEP_ERROR",
+}
 
 export interface PipelineEvent {
-  type:
-    | "STEP_START"
-    | "STEP_END"
-    | "STEP_ERROR"
-    | "PIPELINE_START"
-    | "PIPELINE_END"
-    | "RETRY_ATTEMPT";
+  type: MonitoringEvent;
   timestamp: number;
-  stepName?: string;
+  duration: number;
+  step: string;
   data?: any;
   context?: {
     pipelineId: string;
@@ -19,7 +17,6 @@ export interface PipelineEvent {
 }
 
 export interface PipelineLog {
-  level: LogLevel;
   message: string;
   timestamp: number;
   context: {
@@ -28,12 +25,4 @@ export interface PipelineLog {
     executionId: string;
   };
   metadata: Record<string, any>;
-}
-
-export interface MonitoringConfig {
-  logging?: {
-    level: LogLevel;
-    format: "json" | "text";
-    destination: "file" | "console" | "elasticsearch";
-  };
 }
