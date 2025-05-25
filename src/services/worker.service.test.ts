@@ -2,7 +2,6 @@ import { Worker } from "worker_threads";
 import { WorkerService } from "./worker.service";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
-import esbuild from "esbuild";
 
 // Mock Worker
 jest.mock("worker_threads", () => {
