@@ -68,6 +68,11 @@ jest.mock("fs");
 jest.mock("esbuild", () => ({
   buildSync: jest.fn().mockImplementation((options) => {
     const { stdin } = options;
+    // Se for um teste de integração, retorna o resultado real do esbuild
+    if (process.env.NODE_ENV === "test" && process.env.JEST_WORKER_ID) {
+      return require("esbuild").buildSync(options);
+    }
+    // Para testes unitários, retorna o mock
     return {
       errors: [],
       warnings: [],

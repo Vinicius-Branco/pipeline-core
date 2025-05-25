@@ -2,14 +2,27 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   testMatch: ["**/__tests__/integration/**/*.test.ts"],
-  setupFilesAfterEnv: ["<rootDir>/src/__tests__/integration/setup.ts"],
+  setupFiles: ["<rootDir>/src/__tests__/integration/setup.ts"],
+  testEnvironmentOptions: {
+    ESBUILD_LOG_LEVEL: "error",
+  },
   verbose: false,
-  maxWorkers: 1,
+  silent: true,
   testTimeout: 30000,
   globals: {
     "ts-jest": {
       isolatedModules: true,
     },
+  },
+  setupFilesAfterEnv: ["<rootDir>/src/__tests__/integration/setup.ts"],
+  testEnvironment: "node",
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        isolatedModules: true,
+      },
+    ],
   },
   collectCoverage: true,
   coverageDirectory: "coverage/integration",
@@ -19,11 +32,5 @@ module.exports = {
   },
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],
   modulePathIgnorePatterns: ["/dist/"],
-  silent: true,
-  setupFiles: ["<rootDir>/src/__tests__/integration/setup.ts"],
-  testEnvironmentOptions: {
-    env: {
-      ESBUILD_LOG_LEVEL: "error",
-    },
-  },
+  maxWorkers: 1,
 };
