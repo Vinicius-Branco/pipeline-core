@@ -35,7 +35,9 @@ jest.mock("worker_threads", () => {
         callbacks.forEach((cb) => {
           try {
             cb(data);
-          } catch (error) {}
+          } catch (error) {
+            // Ignore errors in callbacks
+          }
         });
 
         // Finaliza o worker em caso de sucesso ou erro
