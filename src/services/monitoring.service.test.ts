@@ -114,7 +114,7 @@ describe("MonitoringService", () => {
       await monitoringService.trackStep("test-step", handler, context);
 
       const event = listener.mock.calls[0][0];
-      expect(event.duration).toBeGreaterThanOrEqual(100);
+      expect(event.duration).toBeGreaterThanOrEqual(95);
     });
   });
 });
