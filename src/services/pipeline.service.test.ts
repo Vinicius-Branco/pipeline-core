@@ -38,7 +38,7 @@ jest.mock("worker_threads", () => {
 
 // Mock MonitoringService
 jest.mock("./monitoring.service", () => {
-  let listeners: Array<(event: any) => void> = [];
+  const listeners: Array<(event: any) => void> = [];
   const mockInstance = {
     onEvent: jest.fn((listener) => {
       listeners.push(listener);
@@ -862,11 +862,11 @@ describe("PipelineService", () => {
 
       pipeline.onEvent(pipelineListener);
 
-      const result = await monitoringService.trackStep(
-        "step1",
-        async () => "ok",
-        { pipelineId: "pipeline", executionId: "1", attempt: 1 }
-      );
+      await monitoringService.trackStep("step1", async () => "ok", {
+        pipelineId: "pipeline",
+        executionId: "1",
+        attempt: 1,
+      });
 
       // Verifica se o evento foi propagado pelo MonitoringService
       expect(monitoringListener).toHaveBeenCalledWith(
