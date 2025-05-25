@@ -17,7 +17,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "node esbuild.config.js",
     "test": "jest",
     "test:unit": "jest --testPathIgnorePatterns=integration",
     "test:integration": "jest --config jest.integration.config.cjs",
