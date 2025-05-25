@@ -70,24 +70,22 @@ jest.mock("fs", () => ({
   unlinkSync: jest.fn(),
 }));
 
-// Mock esbuild apenas para testes unitários
-if (!process.env.TEST_INTEGRATION) {
-  jest.mock("esbuild", () => ({
-    buildSync: jest.fn().mockImplementation((options) => {
-      const { stdin } = options;
-      return {
-        errors: [],
-        warnings: [],
-        outputFiles: [
-          {
-            text: stdin.contents,
-            path: "mock-output.js",
-          },
-        ],
-      };
-    }),
-  }));
-}
+// Mock esbuild
+jest.mock("esbuild", () => ({
+  buildSync: jest.fn().mockImplementation((options) => {
+    const { stdin } = options;
+    return {
+      errors: [],
+      warnings: [],
+      outputFiles: [
+        {
+          text: stdin.contents,
+          path: "mock-output.js",
+        },
+      ],
+    };
+  }),
+}));
 
 function waitForWorkerInstance(timeout = 200): Promise<any> {
   return new Promise((resolve, reject) => {
