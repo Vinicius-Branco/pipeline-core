@@ -67,7 +67,7 @@ export class WorkerService {
       tempFile = join(tmpdir(), `worker-${Date.now()}.js`);
       const workerCode = `
         const { parentPort, workerData } = require("worker_threads");
-        const tslib = require("tslib");
+        const tslib = require("../../node_modules/tslib");
 
         const handler = ${this.serializeHandler(handler)};
 
