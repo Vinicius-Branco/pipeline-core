@@ -2,6 +2,7 @@ import { Worker } from "worker_threads";
 import { WorkerService } from "./worker.service";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
+import esbuild from "esbuild";
 
 // Mock Worker
 jest.mock("worker_threads", () => {
@@ -65,26 +66,29 @@ jest.mock("worker_threads", () => {
 });
 
 jest.mock("fs");
-jest.mock("esbuild", () => ({
-  buildSync: jest.fn().mockImplementation((options) => {
-    const { stdin } = options;
-    // Se for um teste de integração, retorna o resultado real do esbuild
-    if (process.env.NODE_ENV === "test" && process.env.JEST_WORKER_ID) {
-      return require("esbuild").buildSync(options);
-    }
-    // Para testes unitários, retorna o mock
-    return {
-      errors: [],
-      warnings: [],
-      outputFiles: [
-        {
-          text: stdin.contents,
-          path: "mock-output.js",
-        },
-      ],
-    };
-  }),
-}));
+jest.mock("esbuild", () => {
+  const esbuildRealBuildSync = esbuild.buildSync;
+  return {
+    buildSync: jest.fn().mockImplementation((options) => {
+      const { stdin } = options;
+      // Se for um teste de integração, retorna o resultado real do esbuild
+      if (process.env.NODE_ENV === "test" && process.env.JEST_WORKER_ID) {
+        return esbuildRealBuildSync(options);
+      }
+      // Para testes unitários, retorna o mock
+      return {
+        errors: [],
+        warnings: [],
+        outputFiles: [
+          {
+            text: stdin.contents,
+            path: "mock-output.js",
+          },
+        ],
+      };
+    }),
+  };
+});
 
 function waitForWorkerInstance(timeout = 200): Promise<any> {
   return new Promise((resolve, reject) => {
