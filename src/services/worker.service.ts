@@ -67,7 +67,17 @@ export class WorkerService {
       tempFile = join(tmpdir(), `worker-${Date.now()}.js`);
       const workerCode = `
         const { parentPort, workerData } = require("worker_threads");
-        const tslib = require("../../node_modules/tslib");
+
+        // TypeScript helpers
+        var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+          function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+          return new (P || (P = Promise))(function (resolve, reject) {
+            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+            step((generator = generator.apply(thisArg, _arguments || [])).next());
+          });
+        };
 
         const handler = ${this.serializeHandler(handler)};
 
@@ -104,7 +114,7 @@ export class WorkerService {
             target: ScriptTarget.ES2018,
             module: ModuleKind.CommonJS,
             esModuleInterop: true,
-            importHelpers: true,
+            importHelpers: false,
             noEmitHelpers: true,
           })
         : workerCode;
