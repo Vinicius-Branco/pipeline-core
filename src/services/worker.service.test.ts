@@ -68,7 +68,7 @@ jest.mock("fs");
 jest.mock("typescript", () => ({
   transpile: jest.fn().mockReturnValue("transpiled code"),
   ScriptTarget: {
-    ES2020: "ES2020",
+    ES2018: "ES2018",
   },
   ModuleKind: {
     CommonJS: "CommonJS",

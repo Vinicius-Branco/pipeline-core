@@ -70,7 +70,7 @@ export class WorkerService {
 
         const handler = ${this.serializeHandler(handler)};
 
-        (async () => {
+        async function runWorker() {
           try {
             const abortController = new AbortController();
             const signal = abortController.signal;
@@ -90,7 +90,9 @@ export class WorkerService {
               parentPort?.postMessage({ error: error?.message || String(error) });
             }
           }
-        })();
+        }
+
+        runWorker();
       `;
 
       // Verifica se precisa transpilar
@@ -98,9 +100,10 @@ export class WorkerService {
         this.options.transpileAlways || this.isTypeScript(workerCode);
       const finalCode = shouldTranspile
         ? transpile(workerCode, {
-            target: ScriptTarget.ES2020,
+            target: ScriptTarget.ES2018,
             module: ModuleKind.CommonJS,
             esModuleInterop: true,
+            importHelpers: true,
           })
         : workerCode;
 
