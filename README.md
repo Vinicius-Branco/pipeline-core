@@ -17,7 +17,6 @@ A TypeScript library for managing complex data processing pipelines with advance
 - 📊 Event-based monitoring
 - 🎯 Type-safe with TypeScript
 - 🔒 Infinite loop prevention
-- 🚫 Zero dependencies
 - 👥 Worker thread support for heavy processing
 - 📈 Detailed performance monitoring
 - 🔄 Per-step customizable retry strategies
