@@ -254,6 +254,24 @@ The library supports multiple error handling strategies:
 - `STOP`: Halt pipeline execution
 - `CUSTOM`: Implement custom error handling logic
 
+## How It Works Under the Hood
+
+The pipeline is designed to process data through a series of steps, where each step can be executed independently and concurrently. Here's a breakdown of how it works:
+
+- **Independent Worker Services**: Each step in the pipeline has its own `WorkerService` instance. This allows each step to manage its own concurrency and execution independently.
+
+- **Concurrent Processing**: Within each step, multiple workers can operate concurrently, controlled by a semaphore that limits the number of active workers. This ensures that heavy processing tasks do not overwhelm the system.
+
+- **Parallel Step Execution**: While each step's workers operate concurrently, the steps themselves are processed in parallel. This means that as soon as one step completes, the next step can begin processing, allowing for a smooth and efficient data flow through the pipeline.
+
+- **Event Propagation**: The pipeline uses an event-based monitoring system to track the execution of each step. Events are emitted at the start and end of each step, allowing for detailed monitoring and logging of the pipeline's execution.
+
+- **Error Handling and Retries**: Each step can be configured with custom error handling strategies, including retries with exponential backoff. This ensures that transient errors do not halt the pipeline's execution.
+
+- **Type Safety**: The entire pipeline is built with TypeScript, providing type safety and ensuring that the data flowing through the pipeline is correctly typed and validated.
+
+This architecture allows for a highly scalable and efficient data processing pipeline, capable of handling complex workflows with ease.
+
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.

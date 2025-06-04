@@ -1,5 +1,5 @@
 import { Worker } from "worker_threads";
-import { PipelineOptions } from "../types/index";
+import { PipelineOptions, StepOptions } from "../types/index";
 import { retryWithBackoff } from "./retry.service";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -16,7 +16,8 @@ export class WorkerService {
   private readonly options: PipelineOptions;
   private tempFiles: Set<string> = new Set();
   private finalizedWorkers: Set<Worker> = new Set();
-  private semaphore: Semaphore;
+  private semaphores: Map<string, Semaphore> = new Map();
+  private globalSemaphore: Semaphore;
 
   constructor(options?: PipelineOptions) {
     this.options = {
@@ -25,7 +26,25 @@ export class WorkerService {
       retryStrategy: options?.retryStrategy,
       transpileAlways: options?.transpileAlways ?? true,
     };
-    this.semaphore = new Semaphore(this.options.maxConcurrentWorkers ?? 10);
+    this.globalSemaphore = new Semaphore(
+      this.options.maxConcurrentWorkers ?? 10
+    );
+  }
+
+  private getSemaphoreForStep(
+    stepName: string,
+    stepOptions?: StepOptions
+  ): Semaphore {
+    if (stepOptions?.maxConcurrentWorkers) {
+      if (!this.semaphores.has(stepName)) {
+        this.semaphores.set(
+          stepName,
+          new Semaphore(stepOptions.maxConcurrentWorkers)
+        );
+      }
+      return this.semaphores.get(stepName)!;
+    }
+    return this.globalSemaphore;
   }
 
   private isTypeScript(code: string): boolean {
@@ -207,11 +226,17 @@ export class WorkerService {
           options?: { signal?: AbortSignal }
         ) => Promise<TResult>),
     data: TInput,
-    options?: PipelineOptions
+    options?: PipelineOptions,
+    stepName?: string,
+    stepOptions?: StepOptions
   ): Promise<TResult> {
     const workerOptions = options || this.options;
+    const semaphore = this.getSemaphoreForStep(
+      stepName || "global",
+      stepOptions
+    );
 
-    await this.semaphore.acquire();
+    await semaphore.acquire();
     try {
       if (!workerOptions.retryStrategy) {
         const result = await this.executeWorker(handler, data, workerOptions);
@@ -225,16 +250,15 @@ export class WorkerService {
       );
       return result;
     } finally {
-      this.semaphore.release();
+      semaphore.release();
     }
   }
 
-  getActiveWorkersCount(): number {
-    return this.semaphore.getCurrentConcurrency();
-  }
-
-  getCurrentConcurrency(): number {
-    return this.semaphore.getCurrentConcurrency();
+  getActiveWorkersCount(stepName?: string): number {
+    if (stepName && this.semaphores.has(stepName)) {
+      return this.semaphores.get(stepName)!.getCurrentConcurrency();
+    }
+    return this.globalSemaphore.getCurrentConcurrency();
   }
 
   async cleanup(): Promise<void> {
@@ -248,6 +272,8 @@ export class WorkerService {
     for (const tempFile of this.tempFiles) {
       this.cleanupTempFile(tempFile);
     }
-    this.tempFiles.clear();
+
+    // Limpa todos os semáforos
+    this.semaphores.clear();
   }
 }

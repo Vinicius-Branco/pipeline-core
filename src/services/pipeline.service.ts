@@ -19,13 +19,24 @@ export class PipelineService<TStep extends string, TData = any> {
     [];
   private visitedSteps: Set<string> = new Set();
   private monitoring: MonitoringService;
-  private workerService: WorkerService;
+  private stepWorkers: Map<TStep, WorkerService> = new Map();
 
   constructor(config: PipelineConfig<TStep>) {
     this.config = config;
     this.monitoring = MonitoringService.getInstance();
-    this.workerService = new WorkerService(config.options);
+    this.setupStepWorkers();
     this.setupEventPropagation();
+  }
+
+  private setupStepWorkers(): void {
+    // Create an independent WorkerService for each step
+    this.config.steps.forEach((step) => {
+      const stepOptions = this.getStepOptions(step);
+      this.stepWorkers.set(
+        step.name,
+        new WorkerService(stepOptions || this.config.options)
+      );
+    });
   }
 
   private setupEventPropagation(): void {
@@ -50,26 +61,34 @@ export class PipelineService<TStep extends string, TData = any> {
     });
   }
 
-  private getStepOptions(stepConfig: StepConfig<TStep>): StepOptions {
-    // prioritize step's retryStrategy over global if it exists
-    const globalRetry = this.config.options?.retryStrategy;
-    const stepRetry = stepConfig.options?.retryStrategy;
-    const retryStrategy = stepRetry !== undefined ? stepRetry : globalRetry;
+  private getStepOptions(
+    stepConfig: StepConfig<TStep>
+  ): StepOptions | undefined {
+    // Merge with global options if step-specific options exist
+    if (!stepConfig.options) {
+      return undefined;
+    }
 
     return {
       ...this.config.options,
       ...stepConfig.options,
-      retryStrategy,
+      retryStrategy:
+        stepConfig.options.retryStrategy || this.config.options?.retryStrategy,
     };
   }
 
   private async executeHandler(
     handler: StepHandler<TData>,
     data: TData,
+    stepName: TStep,
     stepOptions?: StepOptions
   ): Promise<TData> {
-    // always use WorkerService to ensure consistent handling of timeouts and concurrency
-    return this.workerService.runWorker(handler, data, stepOptions);
+    const workerService = this.stepWorkers.get(stepName);
+    if (!workerService) {
+      throw new Error(`WorkerService not found for step ${stepName}`);
+    }
+
+    return workerService.runWorker(handler, data, stepOptions);
   }
 
   private async executeStep(
@@ -77,7 +96,6 @@ export class PipelineService<TStep extends string, TData = any> {
     data: TData,
     retryCount = 0
   ): Promise<TData> {
-    // Add current step to visited steps
     this.visitedSteps.add(step);
 
     const stepConfig = this.config.steps.find((s) => s.name === step);
@@ -90,7 +108,7 @@ export class PipelineService<TStep extends string, TData = any> {
     try {
       const result = await this.monitoring.trackStep(
         step,
-        () => this.executeHandler(stepConfig.handler, data, stepOptions),
+        () => this.executeHandler(stepConfig.handler, data, step, stepOptions),
         { pipelineId: "pipeline", executionId: "1", attempt: retryCount + 1 }
       );
       return result;
@@ -116,7 +134,7 @@ export class PipelineService<TStep extends string, TData = any> {
           case ErrorActionType.RETRY:
             if (
               retryCount <
-              (action.maxRetries || stepOptions.retryStrategy?.maxRetries || 3)
+              (action.maxRetries || stepOptions?.retryStrategy?.maxRetries || 3)
             ) {
               if (stepConfig.errorHandlers.onRetry) {
                 await stepConfig.errorHandlers.onRetry(context);
@@ -126,7 +144,6 @@ export class PipelineService<TStep extends string, TData = any> {
             break;
           case ErrorActionType.CONTINUE:
             if (action.nextStep) {
-              // Check if next step was already visited to prevent loops
               if (this.visitedSteps.has(action.nextStep)) {
                 throw new Error(
                   `Infinite loop detected: step ${action.nextStep} was already visited`
@@ -182,7 +199,7 @@ export class PipelineService<TStep extends string, TData = any> {
       case ErrorActionType.RETRY:
         if (
           retryCount <
-          (action.maxRetries || stepOptions.retryStrategy?.maxRetries || 3)
+          (action.maxRetries || stepOptions?.retryStrategy?.maxRetries || 3)
         ) {
           if (stepConfig.errorHandlers?.onRetry) {
             await stepConfig.errorHandlers.onRetry(context);
@@ -260,43 +277,65 @@ export class PipelineService<TStep extends string, TData = any> {
     input: PipelineEvent<TStep, TData> | PipelineEvent<TStep, TData>[]
   ): Promise<TData | TData[]> {
     if (Array.isArray(input)) {
-      // Process items in parallel with a concurrency limit
-      const results: TData[] = [];
-      const errors: Error[] = [];
+      // Process each item in parallel
+      const results = await Promise.all(
+        input.map(async (item) => {
+          let currentData = item.data;
+          let currentStep = item.currentStep;
 
-      // Process items in batches to avoid memory issues
-      const batchSize = this.config.options?.maxConcurrentWorkers || 2;
+          while (currentStep) {
+            try {
+              const stepConfig = this.config.steps.find(
+                (s) => s.name === currentStep
+              );
+              if (!stepConfig) {
+                throw new Error(`Step ${currentStep} not found in steps`);
+              }
 
-      for (let i = 0; i < input.length; i += batchSize) {
-        const batch = input.slice(i, i + batchSize);
-        const batchResults = await Promise.allSettled(
-          batch.map((item) => this.processPipeline(item))
-        );
+              // Executa o step atual usando seu próprio WorkerService
+              currentData = await this.executeHandler(
+                stepConfig.handler,
+                currentData,
+                currentStep,
+                this.getStepOptions(stepConfig)
+              );
 
-        batchResults.forEach((result, index) => {
-          if (result.status === "fulfilled") {
-            results[i + index] = result.value;
-          } else {
-            errors.push(result.reason);
-            // If the item failed, we'll add undefined to maintain the array structure
-            results[i + index] = undefined as any;
+              // Determina o próximo step
+              const currentIndex = this.config.steps.findIndex(
+                (s) => s.name === currentStep
+              );
+              currentStep = this.config.steps[currentIndex + 1]?.name;
+            } catch (error) {
+              const event: PipelineEventType<TStep, TData> = {
+                type: EVENT_TYPES.ERROR,
+                step: currentStep,
+                error: error as Error,
+                data: currentData,
+                duration: 0,
+                timestamp: Date.now(),
+                context: {
+                  step: currentStep,
+                  data: currentData,
+                  error: error as Error,
+                  retryCount: 0,
+                  pipelineState: {
+                    currentStep,
+                    steps: this.config.steps.map((s) => s.name),
+                  },
+                },
+              };
+              this.notifyEventListeners(event);
+              throw error;
+            }
           }
-        });
-      }
 
-      // If there were any errors, throw them
-      if (errors.length > 0) {
-        throw new Error(
-          `Failed to process ${errors.length} items: ${errors
-            .map((e) => e.message)
-            .join(", ")}`
-        );
-      }
+          return currentData;
+        })
+      );
 
       return results;
     }
 
-    // Single item processing
     return this.processPipeline(input);
   }
 
@@ -307,7 +346,11 @@ export class PipelineService<TStep extends string, TData = any> {
   }
 
   public async cleanup(): Promise<void> {
-    await this.workerService.cleanup();
+    // Clean up all WorkerServices
+    for (const workerService of this.stepWorkers.values()) {
+      await workerService.cleanup();
+    }
+    this.stepWorkers.clear();
     this.eventListeners = [];
     this.visitedSteps.clear();
   }

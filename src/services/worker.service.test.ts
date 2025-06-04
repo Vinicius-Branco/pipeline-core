@@ -160,7 +160,7 @@ describe("WorkerService", () => {
 
       // Wait a bit to ensure workers are started
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(workerService.getCurrentConcurrency()).toBeLessThanOrEqual(2);
+      expect(workerService.getActiveWorkersCount()).toBeLessThanOrEqual(2);
 
       // Resolve workers in sequence
       const workers = (Worker as any).instances;
@@ -169,9 +169,8 @@ describe("WorkerService", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      // Aguarda todas as promessas serem resolvidas
       await Promise.all(promises);
-      expect(workerService.getCurrentConcurrency()).toBe(0);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
     }, 3000);
 
     it("should track active workers count using semaphore", async () => {
@@ -179,13 +178,13 @@ describe("WorkerService", () => {
       const promise = workerService.runWorker(workerPath, { id: 1 });
 
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(workerService.getCurrentConcurrency()).toBe(1);
+      expect(workerService.getActiveWorkersCount()).toBe(1);
 
       const worker = await waitForWorkerInstance();
       worker.emit("message", { done: 1 });
       await promise;
 
-      expect(workerService.getCurrentConcurrency()).toBe(0);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
     }, 2000);
 
     it("should release semaphore even if worker fails", async () => {
@@ -193,13 +192,13 @@ describe("WorkerService", () => {
       const promise = workerService.runWorker(workerPath, { id: 1 });
 
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(workerService.getCurrentConcurrency()).toBe(1);
+      expect(workerService.getActiveWorkersCount()).toBe(1);
 
       const worker = await waitForWorkerInstance();
       worker.emit("error", new Error("fail!"));
 
       await expect(promise).rejects.toThrow("fail!");
-      expect(workerService.getCurrentConcurrency()).toBe(0);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
     }, 2000);
 
     it("should handle multiple concurrent workers correctly", async () => {
@@ -209,7 +208,7 @@ describe("WorkerService", () => {
       );
 
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(workerService.getCurrentConcurrency()).toBeLessThanOrEqual(3);
+      expect(workerService.getActiveWorkersCount()).toBeLessThanOrEqual(3);
 
       const workers = (Worker as any).instances;
       for (let i = 0; i < workers.length; i++) {
@@ -217,9 +216,8 @@ describe("WorkerService", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      // Aguarda todas as promessas serem resolvidas
       await Promise.all(promises);
-      expect(workerService.getCurrentConcurrency()).toBe(0);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
     }, 3000);
   });
 
@@ -345,5 +343,162 @@ describe("WorkerService", () => {
       await new Promise((r) => setImmediate(r));
       await expect(promise).resolves.toEqual({ result: 42 });
     }, 1000);
+  });
+
+  describe("Step-specific Concurrency Control", () => {
+    it("should use step-specific maxConcurrentWorkers when provided", async () => {
+      const workerService = new WorkerService({ maxConcurrentWorkers: 5 });
+      const stepName = "testStep";
+      const stepOptions = { maxConcurrentWorkers: 2 };
+
+      // Inicia 3 workers para o mesmo step
+      const promises = [
+        workerService.runWorker(
+          workerPath,
+          { id: 1 },
+          undefined,
+          stepName,
+          stepOptions
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 2 },
+          undefined,
+          stepName,
+          stepOptions
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 3 },
+          undefined,
+          stepName,
+          stepOptions
+        ),
+      ];
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(workerService.getActiveWorkersCount(stepName)).toBeLessThanOrEqual(
+        2
+      );
+
+      const workers = (Worker as any).instances;
+      for (let i = 0; i < workers.length; i++) {
+        workers[i].emit("message", { done: i + 1 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await Promise.all(promises);
+      expect(workerService.getActiveWorkersCount(stepName)).toBe(0);
+    }, 3000);
+
+    it("should use global maxConcurrentWorkers when step-specific is not provided", async () => {
+      const workerService = new WorkerService({ maxConcurrentWorkers: 3 });
+      const stepName = "testStep";
+
+      // Inicia 4 workers para o mesmo step
+      const promises = [
+        workerService.runWorker(workerPath, { id: 1 }, undefined, stepName),
+        workerService.runWorker(workerPath, { id: 2 }, undefined, stepName),
+        workerService.runWorker(workerPath, { id: 3 }, undefined, stepName),
+        workerService.runWorker(workerPath, { id: 4 }, undefined, stepName),
+      ];
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(workerService.getActiveWorkersCount(stepName)).toBeLessThanOrEqual(
+        3
+      );
+
+      const workers = (Worker as any).instances;
+      for (let i = 0; i < workers.length; i++) {
+        workers[i].emit("message", { done: i + 1 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await Promise.all(promises);
+      expect(workerService.getActiveWorkersCount(stepName)).toBe(0);
+    }, 3000);
+
+    it("should handle multiple steps with different concurrency limits", async () => {
+      const workerService = new WorkerService({ maxConcurrentWorkers: 5 });
+      const step1Name = "step1";
+      const step2Name = "step2";
+      const step1Options = { maxConcurrentWorkers: 2 };
+      const step2Options = { maxConcurrentWorkers: 3 };
+
+      // Inicia workers para step1
+      const step1Promises = [
+        workerService.runWorker(
+          workerPath,
+          { id: 1 },
+          undefined,
+          step1Name,
+          step1Options
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 2 },
+          undefined,
+          step1Name,
+          step1Options
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 3 },
+          undefined,
+          step1Name,
+          step1Options
+        ),
+      ];
+
+      // Inicia workers para step2
+      const step2Promises = [
+        workerService.runWorker(
+          workerPath,
+          { id: 4 },
+          undefined,
+          step2Name,
+          step2Options
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 5 },
+          undefined,
+          step2Name,
+          step2Options
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 6 },
+          undefined,
+          step2Name,
+          step2Options
+        ),
+        workerService.runWorker(
+          workerPath,
+          { id: 7 },
+          undefined,
+          step2Name,
+          step2Options
+        ),
+      ];
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(
+        workerService.getActiveWorkersCount(step1Name)
+      ).toBeLessThanOrEqual(2);
+      expect(
+        workerService.getActiveWorkersCount(step2Name)
+      ).toBeLessThanOrEqual(3);
+
+      const workers = (Worker as any).instances;
+      for (let i = 0; i < workers.length; i++) {
+        workers[i].emit("message", { done: i + 1 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await Promise.all([...step1Promises, ...step2Promises]);
+      expect(workerService.getActiveWorkersCount(step1Name)).toBe(0);
+      expect(workerService.getActiveWorkersCount(step2Name)).toBe(0);
+    }, 5000);
   });
 });
