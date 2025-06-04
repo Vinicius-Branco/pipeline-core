@@ -2,13 +2,7 @@
 (global as any).__mockListeners = [];
 
 import { PipelineService } from "./pipeline.service";
-import {
-  PipelineConfig,
-  PipelineEvent,
-  ErrorActionType,
-  RetryStrategy,
-} from "../types";
-import { Worker } from "worker_threads";
+import { PipelineConfig, PipelineEvent, ErrorActionType } from "../types";
 import { MonitoringService } from "./monitoring.service";
 import { WorkerService } from "./worker.service";
 import { MonitoringEvent } from "../types/monitoring";
@@ -330,14 +324,12 @@ describe("PipelineService", () => {
     });
 
     it("should use global timeout when no step-specific timeout is provided", async () => {
-      mockWorkerService.runWorker.mockImplementationOnce(
-        (handler, data, options) => {
-          // Force timeout error regardless of parameter
-          return new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Worker timeout")), 110)
-          );
-        }
-      );
+      mockWorkerService.runWorker.mockImplementationOnce(async () => {
+        await new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Worker timeout")), 110)
+        );
+        return "done";
+      });
       const config: PipelineConfig<"step1"> = {
         steps: [
           {
