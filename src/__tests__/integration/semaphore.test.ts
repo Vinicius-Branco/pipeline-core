@@ -81,18 +81,15 @@ describe("Semaphore Service Integration Tests", () => {
       const semaphore = new Semaphore(3);
       const concurrentExecutions: number[] = [];
       const maxConcurrent = 10;
-      const tasks = Array.from(
-        { length: maxConcurrent },
-        (_, i) => async () => {
-          await semaphore.acquire();
-          const currentConcurrency = semaphore.getCurrentConcurrency();
-          concurrentExecutions.push(currentConcurrency);
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.random() * 100)
-          );
-          semaphore.release();
-        }
-      );
+      const tasks = Array.from({ length: maxConcurrent }, (_) => async () => {
+        await semaphore.acquire();
+        const currentConcurrency = semaphore.getCurrentConcurrency();
+        concurrentExecutions.push(currentConcurrency);
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.random() * 100)
+        );
+        semaphore.release();
+      });
 
       await Promise.all(tasks.map((task) => task()));
 
@@ -106,7 +103,7 @@ describe("Semaphore Service Integration Tests", () => {
       const iterations = 100;
       const errors: Error[] = [];
 
-      const tasks = Array.from({ length: iterations }, (_, i) => async () => {
+      const tasks = Array.from({ length: iterations }, (_) => async () => {
         try {
           await semaphore.acquire();
           const currentConcurrency = semaphore.getCurrentConcurrency();
