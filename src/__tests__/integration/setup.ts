@@ -65,7 +65,7 @@ export const setupTestPipeline = (steps?: any[], options?: any) => {
   return pipeline;
 };
 
-// Teste básico para o arquivo de setup
+// Basic test for the setup file
 describe("Setup Tests", () => {
   it("should create a pipeline with default configuration", () => {
     const pipeline = setupTestPipeline();

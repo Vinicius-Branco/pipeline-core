@@ -124,3 +124,55 @@ export interface PipelineEventType<TStep extends string, TData = any> {
     };
   };
 }
+
+// Graceful Shutdown Types
+export enum PipelineState {
+  RUNNING = "RUNNING",
+  SHUTTING_DOWN = "SHUTTING_DOWN",
+  SHUTDOWN = "SHUTDOWN",
+}
+
+export interface ShutdownOptions {
+  timeout?: number;
+  onShutdownStart?: () => void | Promise<void>;
+  onShutdownComplete?: () => void | Promise<void>;
+  onTimeout?: () => void | Promise<void>;
+  force?: boolean;
+}
+
+export interface ShutdownContext {
+  pipelineId: string;
+  executionId: string;
+  startTime: number;
+  timeout: number;
+  activeExecutions: number;
+  activeWorkers: number;
+}
+
+// Shutdown Event Types
+export const SHUTDOWN_EVENT_TYPES = {
+  SHUTDOWN_START: "SHUTDOWN_START",
+  SHUTDOWN_COMPLETE: "SHUTDOWN_COMPLETE",
+  SHUTDOWN_TIMEOUT: "SHUTDOWN_TIMEOUT",
+  SHUTDOWN_ERROR: "SHUTDOWN_ERROR",
+  WORKER_ABORTED: "WORKER_ABORTED",
+  EXECUTION_CANCELLED: "EXECUTION_CANCELLED",
+} as const;
+
+export type ShutdownEventType =
+  (typeof SHUTDOWN_EVENT_TYPES)[keyof typeof SHUTDOWN_EVENT_TYPES];
+
+export interface PipelineShutdownEvent<TStep extends string, TData = any> {
+  type: ShutdownEventType;
+  step?: TStep;
+  data?: TData;
+  context: ShutdownContext;
+  timestamp: number;
+  error?: Error;
+  message?: string;
+}
+
+// Extend existing PipelineEventType to include shutdown events
+export type ExtendedPipelineEventType<TStep extends string, TData = any> =
+  | PipelineEventType<TStep, TData>
+  | PipelineShutdownEvent<TStep, TData>;

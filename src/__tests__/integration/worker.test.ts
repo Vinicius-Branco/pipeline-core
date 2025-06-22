@@ -239,4 +239,178 @@ describe("Worker Service Integration Tests", () => {
       expect(results[2].status).toBe("fulfilled");
     });
   });
+
+  describe("Graceful Terminate", () => {
+    beforeEach(() => {
+      workerService = new WorkerService({
+        maxConcurrentWorkers: 3,
+      });
+    });
+
+    it("should terminate immediately when no active workers", async () => {
+      const startTime = Date.now();
+      await workerService.gracefulTerminate(5000);
+      const endTime = Date.now();
+
+      // Should terminate quickly when there are no active workers
+      expect(endTime - startTime).toBeLessThan(100);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+    });
+
+    it("should wait for active workers to complete within timeout", async () => {
+      const longRunningHandler = async (data: { delay: number }) => {
+        await new Promise((resolve) => setTimeout(resolve, data.delay));
+        return { completed: true };
+      };
+
+      // Start workers that take 200ms each
+      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(longRunningHandler, { delay: 200 })
+      );
+
+      // Wait a bit to ensure workers are running
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const startTime = Date.now();
+      await workerService.gracefulTerminate(1000); // 1 second timeout
+      const endTime = Date.now();
+
+      // Should wait for workers to finish (200ms) but not exceed timeout (1000ms)
+      expect(endTime - startTime).toBeGreaterThanOrEqual(200);
+      expect(endTime - startTime).toBeLessThan(1000);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+
+      // Wait for workers to finish
+      await Promise.all(workerPromises);
+    });
+
+    it("should force abort workers when timeout is exceeded", async () => {
+      const infiniteHandler = async () => {
+        // Worker that never finishes
+        await new Promise(() => {}); // Promise that never resolves
+        return { completed: true };
+      };
+
+      // Start infinite workers
+      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(infiniteHandler, {})
+      );
+
+      // Wait a bit to ensure workers are running
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const startTime = Date.now();
+      await workerService.gracefulTerminate(100); // Short timeout of 100ms
+      const endTime = Date.now();
+
+      // Should terminate after timeout (100ms) but not take much longer
+      expect(endTime - startTime).toBeGreaterThanOrEqual(100);
+      expect(endTime - startTime).toBeLessThan(300);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+
+      // Workers should have been aborted
+      await expect(Promise.all(workerPromises)).rejects.toThrow();
+    });
+
+    it("should handle mixed scenarios with some workers completing and others timing out", async () => {
+      const fastHandler = async (data: { delay: number }) => {
+        await new Promise((resolve) => setTimeout(resolve, data.delay));
+        return { completed: true };
+      };
+
+      const infiniteHandler = async () => {
+        await new Promise(() => {}); // Promise that never resolves
+        return { completed: true };
+      };
+
+      // Start mixed workers: some fast, others infinite
+      const fastWorkerPromises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(fastHandler, { delay: 50 })
+      );
+
+      const infiniteWorkerPromises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(infiniteHandler, {})
+      );
+
+      // Wait a bit to ensure workers are running
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      const startTime = Date.now();
+      await workerService.gracefulTerminate(200); // 200ms timeout
+      const endTime = Date.now();
+
+      // Should wait for fast workers to finish (50ms) but abort infinite ones
+      expect(endTime - startTime).toBeGreaterThanOrEqual(50);
+      expect(endTime - startTime).toBeLessThan(300);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+
+      // Fast workers should have finished successfully
+      await expect(Promise.all(fastWorkerPromises)).resolves.toBeDefined();
+
+      // Infinite workers should have been aborted
+      await expect(Promise.all(infiniteWorkerPromises)).rejects.toThrow();
+    });
+
+    it("should work correctly with step-specific workers", async () => {
+      const stepHandler = async (data: { delay: number }) => {
+        await new Promise((resolve) => setTimeout(resolve, data.delay));
+        return { completed: true };
+      };
+
+      // Start workers in different steps
+      const step1Promises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(stepHandler, { delay: 100 }, undefined, "step1")
+      );
+
+      const step2Promises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(stepHandler, { delay: 150 }, undefined, "step2")
+      );
+
+      // Wait a bit to ensure workers are running
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      const startTime = Date.now();
+      await workerService.gracefulTerminate(300); // 300ms timeout
+      const endTime = Date.now();
+
+      // Should wait for all workers to finish
+      expect(endTime - startTime).toBeGreaterThanOrEqual(150);
+      expect(endTime - startTime).toBeLessThan(400);
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+      expect(workerService.getActiveWorkersCount("step1")).toBe(0);
+      expect(workerService.getActiveWorkersCount("step2")).toBe(0);
+
+      // All workers should have finished successfully
+      await expect(
+        Promise.all([...step1Promises, ...step2Promises])
+      ).resolves.toBeDefined();
+    });
+
+    it("should handle gracefulTerminate being called multiple times", async () => {
+      const handler = async (data: { delay: number }) => {
+        await new Promise((resolve) => setTimeout(resolve, data.delay));
+        return { completed: true };
+      };
+
+      // Start some workers
+      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+        workerService.runWorker(handler, { delay: 100 })
+      );
+
+      // Wait a bit to ensure workers are running
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      // Call gracefulTerminate multiple times
+      const terminatePromises = [
+        workerService.gracefulTerminate(500),
+        workerService.gracefulTerminate(500),
+        workerService.gracefulTerminate(500),
+      ];
+
+      await Promise.all(terminatePromises);
+
+      expect(workerService.getActiveWorkersCount()).toBe(0);
+      await expect(Promise.all(workerPromises)).resolves.toBeDefined();
+    });
+  });
 });

@@ -12,12 +12,24 @@ interface WorkerError {
   error: string;
 }
 
+interface ActiveWorker {
+  worker: Worker;
+  tempFile?: string;
+  startTime: number;
+  stepName?: string;
+  isAborted: boolean;
+}
+
 export class WorkerService {
   private readonly options: PipelineOptions;
   private tempFiles: Set<string> = new Set();
   private finalizedWorkers: Set<Worker> = new Set();
   private semaphores: Map<string, Semaphore> = new Map();
   private globalSemaphore: Semaphore;
+  private activeWorkers: Map<Worker, ActiveWorker> = new Map();
+  private isShutdown = false;
+  private shutdownPromise: Promise<void> | null = null;
+  private shutdownResolve: (() => void) | null = null;
 
   constructor(options?: PipelineOptions) {
     this.options = {
@@ -70,6 +82,7 @@ export class WorkerService {
   private finalizeWorker(worker: Worker, tempFile?: string): void {
     if (!this.finalizedWorkers.has(worker)) {
       this.finalizedWorkers.add(worker);
+      this.activeWorkers.delete(worker);
       worker.terminate();
       this.cleanupTempFile(tempFile);
     }
@@ -78,8 +91,13 @@ export class WorkerService {
   private async executeWorker<TInput, TResult>(
     handler: string | ((data: TInput) => Promise<TResult>),
     data: TInput,
-    options: PipelineOptions
+    options: PipelineOptions,
+    stepName?: string
   ): Promise<TResult> {
+    if (this.isShutdown) {
+      throw new Error("WorkerService is shutdown");
+    }
+
     let tempFile: string | undefined;
 
     if (typeof handler === "function") {
@@ -162,6 +180,16 @@ export class WorkerService {
         },
       });
 
+      // Track active worker
+      const activeWorker: ActiveWorker = {
+        worker,
+        tempFile,
+        startTime: Date.now(),
+        stepName,
+        isAborted: false,
+      };
+      this.activeWorkers.set(worker, activeWorker);
+
       let timeout: NodeJS.Timeout | undefined;
       let isResolved = false;
 
@@ -174,6 +202,7 @@ export class WorkerService {
 
       if (options.workerTimeout) {
         timeout = setTimeout(() => {
+          activeWorker.isAborted = true;
           worker.postMessage("abort");
           reject(new Error("Worker timeout"));
           cleanup();
@@ -230,6 +259,10 @@ export class WorkerService {
     stepName?: string,
     stepOptions?: StepOptions
   ): Promise<TResult> {
+    if (this.isShutdown) {
+      throw new Error("WorkerService is shutdown");
+    }
+
     const workerOptions = options || this.options;
     const semaphore = this.getSemaphoreForStep(
       stepName || "global",
@@ -239,12 +272,17 @@ export class WorkerService {
     await semaphore.acquire();
     try {
       if (!workerOptions.retryStrategy) {
-        const result = await this.executeWorker(handler, data, workerOptions);
+        const result = await this.executeWorker(
+          handler,
+          data,
+          workerOptions,
+          stepName
+        );
         return result;
       }
 
       const result = await retryWithBackoff(
-        () => this.executeWorker(handler, data, workerOptions),
+        () => this.executeWorker(handler, data, workerOptions, stepName),
         workerOptions.retryStrategy.maxRetries,
         workerOptions.retryStrategy.backoffMs
       );
@@ -255,25 +293,140 @@ export class WorkerService {
   }
 
   getActiveWorkersCount(stepName?: string): number {
-    if (stepName && this.semaphores.has(stepName)) {
-      return this.semaphores.get(stepName)!.getCurrentConcurrency();
+    if (stepName) {
+      return Array.from(this.activeWorkers.values()).filter(
+        (w) => w.stepName === stepName
+      ).length;
     }
-    return this.globalSemaphore.getCurrentConcurrency();
+    return this.activeWorkers.size;
+  }
+
+  getActiveWorkers(): ActiveWorker[] {
+    return Array.from(this.activeWorkers.values());
+  }
+
+  isShutdownState(): boolean {
+    return this.isShutdown;
+  }
+
+  async shutdown(timeout: number = 30000): Promise<void> {
+    if (this.isShutdown) {
+      return this.shutdownPromise || Promise.resolve();
+    }
+
+    this.isShutdown = true;
+
+    // If no active workers, shutdown immediately
+    if (this.activeWorkers.size === 0) {
+      await this.cleanup();
+      return;
+    }
+
+    // Create shutdown promise
+    this.shutdownPromise = new Promise<void>((resolve) => {
+      this.shutdownResolve = resolve;
+    });
+
+    // Wait for active workers to complete or timeout
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`WorkerService shutdown timeout after ${timeout}ms`));
+      }, timeout);
+    });
+
+    try {
+      await Promise.race([this.waitForWorkersCompletion(), timeoutPromise]);
+    } catch (error) {
+      // Force abort remaining workers
+      await this.abortAllWorkers();
+    } finally {
+      await this.cleanup();
+      this.shutdownResolve?.();
+    }
+
+    return this.shutdownPromise;
+  }
+
+  async waitForWorkersCompletion(): Promise<void> {
+    if (this.activeWorkers.size === 0) {
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (this.activeWorkers.size === 0) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 50);
+
+      // Fallback timeout - should be greater than any expected shutdown timeout
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, 60000); // 60 seconds as safe fallback
+    });
+  }
+
+  async abortAllWorkers(): Promise<void> {
+    const abortPromises = Array.from(this.activeWorkers.values()).map(
+      async (activeWorker) => {
+        try {
+          activeWorker.isAborted = true;
+          activeWorker.worker.postMessage("abort");
+          this.finalizeWorker(activeWorker.worker, activeWorker.tempFile);
+        } catch (error) {
+          // Ignore errors during abort
+        }
+      }
+    );
+
+    await Promise.all(abortPromises);
+  }
+
+  async gracefulTerminate(timeout: number = 10000): Promise<void> {
+    if (this.activeWorkers.size === 0) {
+      return;
+    }
+
+    // Create timeout promise
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Graceful terminate timeout after ${timeout}ms`));
+      }, timeout);
+    });
+
+    // First try graceful shutdown
+    try {
+      await Promise.race([this.waitForWorkersCompletion(), timeoutPromise]);
+    } catch (error) {
+      // If graceful fails or timeout occurs, force terminate
+      await this.abortAllWorkers();
+    }
   }
 
   async cleanup(): Promise<void> {
-    // Limpa todos os workers finalizados
+    // Shutdown all semaphores
+    await this.globalSemaphore.shutdown();
+    for (const semaphore of this.semaphores.values()) {
+      await semaphore.shutdown();
+    }
+
+    // Abort all active workers
+    await this.abortAllWorkers();
+
+    // Clean up all finalized workers
     for (const worker of this.finalizedWorkers) {
       worker.terminate();
     }
     this.finalizedWorkers.clear();
 
-    // Limpa todos os arquivos temporários
+    // Clean up all temporary files
     for (const tempFile of this.tempFiles) {
       this.cleanupTempFile(tempFile);
     }
 
-    // Limpa todos os semáforos
+    // Clean up all semaphores
     this.semaphores.clear();
   }
 }

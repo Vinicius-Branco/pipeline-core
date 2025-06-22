@@ -2,7 +2,13 @@
 (global as any).__mockListeners = [];
 
 import { PipelineService } from "./pipeline.service";
-import { PipelineConfig, PipelineEvent, ErrorActionType } from "../types";
+import {
+  PipelineConfig,
+  PipelineEvent,
+  ErrorActionType,
+  PipelineState,
+  SHUTDOWN_EVENT_TYPES,
+} from "../types";
 import { MonitoringService } from "./monitoring.service";
 import { WorkerService } from "./worker.service";
 import { MonitoringEvent } from "../types/monitoring";
@@ -390,6 +396,193 @@ describe("PipelineService", () => {
           }),
         })
       );
+    });
+  });
+});
+
+describe("PipelineService - Graceful Shutdown", () => {
+  let pipeline: PipelineService<"step1" | "step2", any>;
+  let mockWorkerService: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const config: PipelineConfig<"step1" | "step2"> = {
+      steps: [
+        {
+          name: "step1",
+          handler: async (data: any) => ({ ...data, step1: "completed" }),
+        },
+        {
+          name: "step2",
+          handler: async (data: any) => ({ ...data, step2: "completed" }),
+        },
+      ],
+      options: {
+        maxConcurrentWorkers: 2,
+      },
+    };
+
+    // Mock WorkerService
+    mockWorkerService = {
+      runWorker: jest.fn(),
+      shutdown: jest.fn(),
+      abortAllWorkers: jest.fn(),
+      cleanup: jest.fn(),
+      getActiveWorkersCount: jest.fn().mockReturnValue(0),
+    };
+
+    const { WorkerService } = require("./worker.service");
+    WorkerService.mockImplementation(() => mockWorkerService);
+
+    pipeline = new PipelineService(config);
+  });
+
+  describe("Basic shutdown functionality", () => {
+    it("should initialize in RUNNING state", () => {
+      expect(pipeline.getState()).toBe(PipelineState.RUNNING);
+      expect(pipeline.isShuttingDown()).toBe(false);
+      expect(pipeline.isShutdown()).toBe(false);
+    });
+
+    it("should reject new executions when shutting down", async () => {
+      // Start shutdown
+      const shutdownPromise = pipeline.shutdown();
+
+      // Try to execute while shutting down
+      await expect(
+        pipeline.execute({ data: { test: "data" }, currentStep: "step1" })
+      ).rejects.toThrow(
+        "Pipeline is in SHUTTING_DOWN state and cannot accept new executions"
+      );
+
+      await shutdownPromise;
+    });
+
+    it("should reject new executions when shutdown", async () => {
+      await pipeline.shutdown();
+
+      await expect(
+        pipeline.execute({ data: { test: "data" }, currentStep: "step1" })
+      ).rejects.toThrow(
+        "Pipeline is in SHUTDOWN state and cannot accept new executions"
+      );
+    });
+
+    it("should shutdown immediately when no active executions", async () => {
+      const startTime = Date.now();
+      await pipeline.shutdown();
+      const endTime = Date.now();
+
+      expect(endTime - startTime).toBeLessThan(100);
+      expect(pipeline.getState()).toBe(PipelineState.SHUTDOWN);
+    });
+
+    it("should handle multiple shutdown calls", async () => {
+      const shutdown1 = pipeline.shutdown();
+      const shutdown2 = pipeline.shutdown();
+      // Ambas devem resolver sem erro
+      await expect(shutdown1).resolves.toBeUndefined();
+      await expect(shutdown2).resolves.toBeUndefined();
+    });
+
+    it("should shutdown worker services", async () => {
+      mockWorkerService.shutdown.mockResolvedValue(undefined);
+
+      await pipeline.shutdown();
+
+      expect(mockWorkerService.shutdown).toHaveBeenCalledWith(30000); // Default timeout
+    });
+  });
+
+  describe("Shutdown events", () => {
+    it("should emit shutdown start event", async () => {
+      const events: any[] = [];
+      pipeline.onEvent((event) => {
+        events.push(event);
+      });
+
+      await pipeline.shutdown();
+
+      const shutdownStartEvent = events.find(
+        (e) => e.type === SHUTDOWN_EVENT_TYPES.SHUTDOWN_START
+      );
+      expect(shutdownStartEvent).toBeDefined();
+      expect(shutdownStartEvent.context).toBeDefined();
+      expect(shutdownStartEvent.context.pipelineId).toBe("pipeline");
+    });
+
+    it("should emit shutdown complete event", async () => {
+      const events: any[] = [];
+      pipeline.onEvent((event) => {
+        events.push(event);
+      });
+
+      await pipeline.shutdown();
+
+      const shutdownCompleteEvent = events.find(
+        (e) => e.type === SHUTDOWN_EVENT_TYPES.SHUTDOWN_COMPLETE
+      );
+      expect(shutdownCompleteEvent).toBeDefined();
+    });
+  });
+
+  describe("Shutdown callbacks", () => {
+    it("should call onShutdownStart callback", async () => {
+      const onShutdownStart = jest.fn();
+      const onShutdownComplete = jest.fn();
+      const onTimeout = jest.fn();
+
+      await pipeline.shutdown({
+        onShutdownStart,
+        onShutdownComplete,
+        onTimeout,
+      });
+
+      expect(onShutdownStart).toHaveBeenCalled();
+      expect(onShutdownComplete).toHaveBeenCalled();
+      expect(onTimeout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Wait for completion", () => {
+    it("should resolve immediately when no active executions", async () => {
+      const startTime = Date.now();
+      await pipeline.waitForCompletion();
+      const endTime = Date.now();
+
+      expect(endTime - startTime).toBeLessThan(200); // Increased tolerance
+    });
+  });
+
+  describe("Shutdown with number timeout", () => {
+    it("should accept number as timeout", async () => {
+      mockWorkerService.shutdown.mockResolvedValue(undefined);
+
+      await pipeline.shutdown(5000);
+
+      expect(mockWorkerService.shutdown).toHaveBeenCalledWith(5000);
+    });
+  });
+
+  describe("Cleanup", () => {
+    it("should cleanup all resources", async () => {
+      mockWorkerService.cleanup.mockResolvedValue(undefined);
+
+      await pipeline.cleanup();
+
+      expect(mockWorkerService.cleanup).toHaveBeenCalled();
+    });
+
+    it("should clear event listeners", async () => {
+      const eventListener = jest.fn();
+      pipeline.onEvent(eventListener);
+
+      await pipeline.cleanup();
+
+      // Try to emit an event (should not call the listener)
+      await pipeline.shutdown();
+      expect(eventListener).not.toHaveBeenCalled();
     });
   });
 });
