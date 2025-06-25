@@ -1,4 +1,4 @@
-import { retryWithBackoff } from "../../services/retry.service";
+import { retryWithBackoff } from "../../../services/retry.service";
 
 describe("Retry Service Integration Tests", () => {
   describe("Successful Retries", () => {

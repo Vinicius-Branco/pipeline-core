@@ -283,3 +283,34 @@ MIT
 ## Support
 
 For support, please open an issue in the GitHub repository or contact the maintainers.
+
+## Mutation Testing
+
+The project uses [Stryker Mutator](https://stryker-mutator.io/) for mutation testing, which now supports both unit and integration tests.
+
+### Available Commands
+
+```bash
+# Mutation testing with unit tests only (faster)
+npm run test:mutation:unit
+
+# Mutation testing with integration tests only
+npm run test:mutation:integration
+
+# Mutation testing with all tests
+npm run test:mutation:all
+
+# Default mutation testing (all tests)
+npm run test:mutation
+
+# Quick preview (console only)
+npm run test:mutation:preview
+```
+
+### Configurations
+
+- **Unit** (`stryker.unit.conf.mjs`): Focus on business logic, faster
+- **Integration** (`stryker.integration.conf.mjs`): Focus on system behavior, slower
+- **Complete** (`stryker.conf.mjs`): All tests, maximum coverage
+
+See [MUTATION_TESTING.md](./MUTATION_TESTING.md) for complete details on configuration and usage.
