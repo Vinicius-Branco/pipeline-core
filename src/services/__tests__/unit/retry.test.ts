@@ -1,4 +1,4 @@
-import { retryWithBackoff } from "./retry.service";
+import { retryWithBackoff } from "../../retry.service";
 
 describe("retryWithBackoff", () => {
   let originalRandom: () => number;

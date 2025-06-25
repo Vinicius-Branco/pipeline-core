@@ -19,10 +19,15 @@
   "scripts": {
     "build": "tsc && tsc-alias",
     "test": "jest",
-    "test:unit": "jest --testPathIgnorePatterns=integration",
-    "test:integration": "jest --config jest.integration.config.cjs",
+    "test:unit": "jest --testPathPattern=src/services/__tests__/unit",
+    "test:integration": "jest  --testPathPattern=src/services/__tests__/integration",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:mutation": "stryker run",
+    "test:mutation:unit": "stryker run stryker.unit.conf.mjs",
+    "test:mutation:integration": "stryker run stryker.integration.conf.mjs",
+    "test:mutation:all": "stryker run stryker.conf.mjs",
+    "test:mutation:preview": "stryker run --reporters clear-text --concurrency 1",
     "lint": "eslint src --ext .ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm run test:unit && npm run test:integration",
@@ -53,6 +58,9 @@
     "node": ">=16.0.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.0.1",
+    "@stryker-mutator/jest-runner": "^9.0.1",
+    "@stryker-mutator/typescript-checker": "^9.0.1",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.11.24",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
