@@ -358,7 +358,7 @@ export class WorkerService {
           clearInterval(checkInterval);
           resolve();
         }
-      }, 50);
+      }, 10); // Reduced interval for more responsive checking
 
       // Fallback timeout - should be greater than any expected shutdown timeout
       setTimeout(() => {
@@ -374,6 +374,8 @@ export class WorkerService {
         try {
           activeWorker.isAborted = true;
           activeWorker.worker.postMessage("abort");
+          // Give workers a small grace period to handle abort gracefully
+          await new Promise((resolve) => setTimeout(resolve, 20));
           this.finalizeWorker(activeWorker.worker, activeWorker.tempFile);
         } catch (error) {
           // Ignore errors during abort
@@ -401,6 +403,8 @@ export class WorkerService {
       await Promise.race([this.waitForWorkersCompletion(), timeoutPromise]);
     } catch (error) {
       // If graceful fails or timeout occurs, force terminate
+      // Give workers a small grace period before aborting
+      await new Promise((resolve) => setTimeout(resolve, 20));
       await this.abortAllWorkers();
     }
   }
