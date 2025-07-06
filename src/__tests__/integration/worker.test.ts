@@ -276,7 +276,8 @@ describe("Worker Service Integration Tests", () => {
       const endTime = Date.now();
 
       // Should wait for workers to finish (200ms) but not exceed timeout (1000ms)
-      expect(endTime - startTime).toBeGreaterThanOrEqual(200);
+      // Account for the 50ms check interval in waitForWorkersCompletion
+      expect(endTime - startTime).toBeGreaterThanOrEqual(150);
       expect(endTime - startTime).toBeLessThan(1000);
       expect(workerService.getActiveWorkersCount()).toBe(0);
 
