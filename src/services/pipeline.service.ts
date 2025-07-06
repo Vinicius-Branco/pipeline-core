@@ -9,17 +9,38 @@ import {
   StepOptions,
   StepHandler,
   EVENT_TYPES,
+  PipelineState,
+  ShutdownOptions,
+  ShutdownContext,
+  SHUTDOWN_EVENT_TYPES,
+  PipelineShutdownEvent,
+  ExtendedPipelineEventType,
 } from "../types";
 import { MonitoringService } from "./monitoring.service";
 import { WorkerService } from "./worker.service";
 
+interface ActiveExecution {
+  id: string;
+  startTime: number;
+  currentStep: string;
+  data: any;
+  promise: Promise<any>;
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+}
+
 export class PipelineService<TStep extends string, TData = any> {
   private config: PipelineConfig<TStep>;
-  private eventListeners: ((event: PipelineEventType<TStep, TData>) => void)[] =
-    [];
+  private eventListeners: ((
+    event: ExtendedPipelineEventType<TStep, TData>
+  ) => void)[] = [];
   private visitedSteps: Set<string> = new Set();
   private monitoring: MonitoringService;
   private stepWorkers: Map<TStep, WorkerService> = new Map();
+  private state: PipelineState = PipelineState.RUNNING;
+  private activeExecutions: Map<string, ActiveExecution> = new Map();
+  private shutdownPromise: Promise<void> | null = null;
+  private shutdownResolve: (() => void) | null = null;
 
   constructor(config: PipelineConfig<TStep>) {
     this.config = config;
@@ -276,6 +297,12 @@ export class PipelineService<TStep extends string, TData = any> {
   public async execute(
     input: PipelineEvent<TStep, TData> | PipelineEvent<TStep, TData>[]
   ): Promise<TData | TData[]> {
+    if (this.state !== PipelineState.RUNNING) {
+      throw new Error(
+        `Pipeline is in ${this.state} state and cannot accept new executions`
+      );
+    }
+
     if (Array.isArray(input)) {
       // Process each item in parallel
       const results = await Promise.all(
@@ -292,7 +319,7 @@ export class PipelineService<TStep extends string, TData = any> {
                 throw new Error(`Step ${currentStep} not found in steps`);
               }
 
-              // Executa o step atual usando seu próprio WorkerService
+              // Execute the current step using its own WorkerService
               currentData = await this.executeHandler(
                 stepConfig.handler,
                 currentData,
@@ -300,7 +327,7 @@ export class PipelineService<TStep extends string, TData = any> {
                 this.getStepOptions(stepConfig)
               );
 
-              // Determina o próximo step
+              // Determine the next step
               const currentIndex = this.config.steps.findIndex(
                 (s) => s.name === currentStep
               );
@@ -340,9 +367,216 @@ export class PipelineService<TStep extends string, TData = any> {
   }
 
   public onEvent(
-    listener: (event: PipelineEventType<TStep, TData>) => void
+    listener: (event: ExtendedPipelineEventType<TStep, TData>) => void
   ): void {
     this.eventListeners.push(listener);
+  }
+
+  public getState(): PipelineState {
+    return this.state;
+  }
+
+  public isShuttingDown(): boolean {
+    return this.state === PipelineState.SHUTTING_DOWN;
+  }
+
+  public isShutdown(): boolean {
+    return this.state === PipelineState.SHUTDOWN;
+  }
+
+  public getActiveExecutions(): number {
+    return this.activeExecutions.size;
+  }
+
+  public getActiveExecutionsDetails(): ActiveExecution[] {
+    return Array.from(this.activeExecutions.values());
+  }
+
+  public async shutdown(options: ShutdownOptions | number = {}): Promise<void> {
+    if (this.state === PipelineState.SHUTDOWN) {
+      return;
+    }
+
+    if (this.state === PipelineState.SHUTTING_DOWN) {
+      if (this.shutdownPromise) {
+        return this.shutdownPromise;
+      }
+      return;
+    }
+
+    // Normalize options
+    const shutdownOptions: ShutdownOptions =
+      typeof options === "number" ? { timeout: options } : options;
+
+    const timeout = shutdownOptions.timeout || 30000;
+    const startTime = Date.now();
+
+    // Change state to shutting down
+    this.state = PipelineState.SHUTTING_DOWN;
+
+    // Create shutdown promise
+    this.shutdownPromise = new Promise<void>((resolve) => {
+      this.shutdownResolve = resolve;
+    });
+
+    // Create shutdown context
+    const shutdownContext: ShutdownContext = {
+      pipelineId: "pipeline",
+      executionId: `shutdown-${Date.now()}`,
+      startTime,
+      timeout,
+      activeExecutions: this.activeExecutions.size,
+      activeWorkers: this.getTotalActiveWorkers(),
+    };
+
+    try {
+      // Emit shutdown start event
+      this.emitShutdownEvent(
+        SHUTDOWN_EVENT_TYPES.SHUTDOWN_START,
+        shutdownContext
+      );
+
+      // Call onShutdownStart callback
+      if (shutdownOptions.onShutdownStart) {
+        await shutdownOptions.onShutdownStart();
+      }
+
+      // Wait for active executions to complete
+      await this.waitForActiveExecutions(timeout);
+
+      // Shutdown all worker services
+      await this.shutdownWorkerServices(timeout);
+
+      // Change state to shutdown
+      this.state = PipelineState.SHUTDOWN;
+
+      // Emit shutdown complete event
+      this.emitShutdownEvent(
+        SHUTDOWN_EVENT_TYPES.SHUTDOWN_COMPLETE,
+        shutdownContext
+      );
+
+      // Call onShutdownComplete callback
+      if (shutdownOptions.onShutdownComplete) {
+        await shutdownOptions.onShutdownComplete();
+      }
+
+      this.shutdownResolve?.();
+    } catch (error) {
+      // Emit shutdown error event
+      this.emitShutdownEvent(
+        SHUTDOWN_EVENT_TYPES.SHUTDOWN_ERROR,
+        shutdownContext,
+        error as Error
+      );
+
+      // If timeout reached, force shutdown
+      if (shutdownOptions.onTimeout) {
+        await shutdownOptions.onTimeout();
+      }
+
+      // Force cleanup
+      await this.forceCleanup();
+      this.state = PipelineState.SHUTDOWN;
+      this.shutdownResolve?.();
+    }
+  }
+
+  public async waitForCompletion(): Promise<void> {
+    if (this.state === PipelineState.SHUTDOWN) {
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (
+          this.activeExecutions.size === 0 &&
+          this.getTotalActiveWorkers() === 0
+        ) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+
+      // Fallback timeout
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, 10000);
+    });
+  }
+
+  private async waitForActiveExecutions(timeout: number): Promise<void> {
+    if (this.activeExecutions.size === 0) {
+      return;
+    }
+
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new Error(`Timeout waiting for active executions after ${timeout}ms`)
+        );
+      }, timeout);
+    });
+
+    const waitPromise = new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (this.activeExecutions.size === 0) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+
+    await Promise.race([waitPromise, timeoutPromise]);
+  }
+
+  private async shutdownWorkerServices(timeout: number): Promise<void> {
+    const shutdownPromises = Array.from(this.stepWorkers.values()).map(
+      (workerService) => workerService.shutdown(timeout)
+    );
+
+    await Promise.all(shutdownPromises);
+  }
+
+  private async forceCleanup(): Promise<void> {
+    // Cancel all active executions
+    for (const execution of this.activeExecutions.values()) {
+      execution.reject(new Error("Pipeline shutdown forced"));
+    }
+    this.activeExecutions.clear();
+
+    // Force shutdown all worker services
+    for (const workerService of this.stepWorkers.values()) {
+      await workerService.abortAllWorkers();
+    }
+
+    // Clean up resources
+    await this.cleanup();
+  }
+
+  private getTotalActiveWorkers(): number {
+    let total = 0;
+    for (const workerService of this.stepWorkers.values()) {
+      total += workerService.getActiveWorkersCount();
+    }
+    return total;
+  }
+
+  private emitShutdownEvent(
+    type: string,
+    context: ShutdownContext,
+    error?: Error
+  ): void {
+    const event: PipelineShutdownEvent<TStep, TData> = {
+      type: type as any,
+      context,
+      timestamp: Date.now(),
+      error,
+      message: error?.message,
+    };
+
+    this.notifyEventListeners(event);
   }
 
   public async cleanup(): Promise<void> {
@@ -353,9 +587,12 @@ export class PipelineService<TStep extends string, TData = any> {
     this.stepWorkers.clear();
     this.eventListeners = [];
     this.visitedSteps.clear();
+    this.activeExecutions.clear();
   }
 
-  private notifyEventListeners(event: PipelineEventType<TStep, TData>): void {
+  private notifyEventListeners(
+    event: ExtendedPipelineEventType<TStep, TData>
+  ): void {
     this.eventListeners.forEach((listener) => listener(event));
   }
 }

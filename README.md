@@ -20,6 +20,9 @@ A TypeScript library for managing complex data processing pipelines with advance
 - 👥 Worker thread support for heavy processing
 - 📈 Detailed performance monitoring
 - 🔄 Per-step customizable retry strategies
+- 🛑 **Graceful shutdown with timeout control**
+- 📡 **System signal integration (SIGTERM/SIGINT)**
+- 🔄 **Controlled resource cleanup**
 
 ## Installation
 
@@ -203,6 +206,85 @@ const config: PipelineConfig<"step1"> = {
 ```
 
 Note that when using `require()` with ES modules that have default exports, you need to access the `default` property to get the exported function or value.
+
+### Graceful Shutdown
+
+The pipeline supports graceful shutdown with timeout control and system signal integration:
+
+```typescript
+// Basic shutdown with default timeout (30 seconds)
+await pipeline.shutdown();
+
+// Shutdown with custom timeout
+await pipeline.shutdown(10000); // 10 seconds
+
+// Shutdown with callbacks
+await pipeline.shutdown({
+  timeout: 15000,
+  onShutdownStart: () => console.log("🔄 Shutdown started..."),
+  onShutdownComplete: () => console.log("✅ Shutdown completed"),
+  onTimeout: () => console.log("⏰ Timeout reached, forcing shutdown"),
+});
+
+// Check pipeline state
+if (pipeline.isShuttingDown()) {
+  console.log("Pipeline is shutting down...");
+}
+
+// Wait for all executions to complete
+await pipeline.waitForCompletion();
+```
+
+#### System Signal Integration
+
+```typescript
+// Handle SIGTERM (graceful shutdown)
+process.on("SIGTERM", async () => {
+  console.log("📡 Received SIGTERM, initiating graceful shutdown...");
+  try {
+    await pipeline.shutdown(10000);
+    process.exit(0);
+  } catch (error) {
+    console.error("Shutdown failed:", error.message);
+    process.exit(1);
+  }
+});
+
+// Handle SIGINT (Ctrl+C)
+process.on("SIGINT", async () => {
+  console.log("📡 Received SIGINT, initiating graceful shutdown...");
+  try {
+    await pipeline.shutdown(5000);
+    process.exit(0);
+  } catch (error) {
+    console.error("Shutdown failed:", error.message);
+    process.exit(1);
+  }
+});
+```
+
+#### Shutdown Events
+
+```typescript
+pipeline.onEvent((event) => {
+  switch (event.type) {
+    case "SHUTDOWN_START":
+      console.log("🔄 Shutdown initiated");
+      break;
+    case "SHUTDOWN_COMPLETE":
+      console.log("✅ Shutdown completed successfully");
+      break;
+    case "SHUTDOWN_TIMEOUT":
+      console.log("⏰ Shutdown timeout reached");
+      break;
+    case "SHUTDOWN_ERROR":
+      console.log("❌ Shutdown error:", event.error?.message);
+      break;
+  }
+});
+```
+
+For detailed information about graceful shutdown, see [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md).
 
 ## Configuration
 

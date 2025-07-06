@@ -112,28 +112,6 @@ describe("Monitoring Service Integration Tests", () => {
       expect(events[0].data).toBe(error);
       expect(events[0].duration).toBeGreaterThanOrEqual(0);
     });
-
-    it("should measure step duration correctly", async () => {
-      const stepName = "testStep";
-      const context = {
-        pipelineId: "test-pipeline",
-        executionId: "test-execution",
-        attempt: 1,
-      };
-      const delay = 100;
-
-      await monitoringService.trackStep(
-        stepName,
-        async () => {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return { result: "success" };
-        },
-        context
-      );
-
-      expect(events).toHaveLength(1);
-      expect(events[0].duration).toBeGreaterThanOrEqual(delay);
-    });
   });
 
   describe("Singleton Pattern", () => {

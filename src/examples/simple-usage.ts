@@ -26,7 +26,7 @@ const config: PipelineConfig<PipelineSteps> = {
   options: {
     // Using system's CPU count to optimize parallel processing
     maxConcurrentWorkers: os.cpus().length,
-    workerTimeout: 30000, // 30 segundos de timeout
+    workerTimeout: 30000, // 30 seconds timeout
   },
 };
 
@@ -40,9 +40,9 @@ pipeline.onEvent((event) => {
   console.log("Event:", {
     type: event.type,
     step: event.step,
-    duration: event.duration,
+    duration: "duration" in event ? event.duration : undefined,
     timestamp: new Date(event.timestamp).toISOString(),
-    context: event.context,
+    context: "context" in event ? event.context : undefined,
   });
 });
 
