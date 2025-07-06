@@ -432,7 +432,7 @@ describe("PipelineService - Graceful Shutdown", () => {
       getActiveWorkersCount: jest.fn().mockReturnValue(0),
     };
 
-    const { WorkerService } = require("./worker.service");
+    const { WorkerService } = jest.requireMock("./worker.service");
     WorkerService.mockImplementation(() => mockWorkerService);
 
     pipeline = new PipelineService(config);

@@ -60,12 +60,12 @@ describe("Worker Service Integration Tests", () => {
     it("should respect global concurrency limit", async () => {
       const delays = [100, 50, 150, 75];
 
-      const tasks = delays.map((delay, index) => {
+      const tasks = delays.map((delay, _index) => {
         const handler = async (data: { index: number; delay: number }) => {
           await new Promise((resolve) => setTimeout(resolve, data.delay));
           return { index: data.index };
         };
-        return workerService.runWorker(handler, { index, delay });
+        return workerService.runWorker(handler, { index: _index, delay });
       });
 
       const results = await Promise.all(tasks);
@@ -81,14 +81,14 @@ describe("Worker Service Integration Tests", () => {
 
       const delays = [100, 50, 150];
 
-      const tasks = delays.map((delay, index) => {
+      const tasks = delays.map((delay, _index) => {
         const handler = async (data: { index: number; delay: number }) => {
           await new Promise((resolve) => setTimeout(resolve, data.delay));
           return { index: data.index };
         };
         return workerService.runWorker(
           handler,
-          { index, delay },
+          { index: _index, delay },
           undefined,
           "testStep",
           stepOptions
@@ -153,11 +153,11 @@ describe("Worker Service Integration Tests", () => {
     });
 
     it("should handle cleanup of multiple workers", async () => {
-      const tasks = Array.from({ length: 5 }, (_, index) => {
+      const tasks = Array.from({ length: 5 }, (_, _index) => {
         const handler = async (data: { index: number }) => ({
           index: data.index,
         });
-        return workerService.runWorker(handler, { index });
+        return workerService.runWorker(handler, { index: _index });
       });
 
       const results = await Promise.all(tasks);
@@ -193,18 +193,18 @@ describe("Worker Service Integration Tests", () => {
         return { value: data.value * 2 };
       };
 
-      const tasks = Array.from({ length: 4 }, (_, i) => {
+      const tasks = Array.from({ length: 4 }, (_, _i) => {
         return Promise.all([
           workerService.runWorker(
             step1Handler,
-            { value: i },
+            { value: _i },
             undefined,
             "step1",
             step1Options
           ),
           workerService.runWorker(
             step2Handler,
-            { value: i },
+            { value: _i },
             undefined,
             "step2",
             step2Options
@@ -264,7 +264,7 @@ describe("Worker Service Integration Tests", () => {
       };
 
       // Start workers that take 200ms each
-      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+      const workerPromises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(longRunningHandler, { delay: 200 })
       );
 
@@ -292,7 +292,7 @@ describe("Worker Service Integration Tests", () => {
       };
 
       // Start infinite workers
-      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+      const workerPromises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(infiniteHandler, {})
       );
 
@@ -324,11 +324,11 @@ describe("Worker Service Integration Tests", () => {
       };
 
       // Start mixed workers: some fast, others infinite
-      const fastWorkerPromises = Array.from({ length: 2 }, (_, index) =>
+      const fastWorkerPromises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(fastHandler, { delay: 50 })
       );
 
-      const infiniteWorkerPromises = Array.from({ length: 2 }, (_, index) =>
+      const infiniteWorkerPromises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(infiniteHandler, {})
       );
 
@@ -358,11 +358,11 @@ describe("Worker Service Integration Tests", () => {
       };
 
       // Start workers in different steps
-      const step1Promises = Array.from({ length: 2 }, (_, index) =>
+      const step1Promises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(stepHandler, { delay: 100 }, undefined, "step1")
       );
 
-      const step2Promises = Array.from({ length: 2 }, (_, index) =>
+      const step2Promises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(stepHandler, { delay: 150 }, undefined, "step2")
       );
 
@@ -393,7 +393,7 @@ describe("Worker Service Integration Tests", () => {
       };
 
       // Start some workers
-      const workerPromises = Array.from({ length: 2 }, (_, index) =>
+      const workerPromises = Array.from({ length: 2 }, (_, _index) =>
         workerService.runWorker(handler, { delay: 100 })
       );
 

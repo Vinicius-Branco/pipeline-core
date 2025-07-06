@@ -90,7 +90,7 @@ describe("WorkerService", () => {
 
   describe("Worker Execution", () => {
     it("should execute a function handler and resolve with result", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
 
       const promise = workerService.runWorker(handler, { test: "data" });
 
@@ -120,7 +120,7 @@ describe("WorkerService", () => {
     });
 
     it("should reject if worker emits error", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const promise = workerService.runWorker(handler, { test: "data" });
 
       // Wait a bit for the Worker to be created
@@ -133,7 +133,7 @@ describe("WorkerService", () => {
     });
 
     it("should reject if worker exits with non-zero code", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const promise = workerService.runWorker(handler, { test: "data" });
 
       // Wait a bit for the Worker to be created
@@ -146,7 +146,7 @@ describe("WorkerService", () => {
     });
 
     it("should reject if worker times out", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const promise = workerService.runWorker(
         handler,
         { test: "data" },
@@ -159,7 +159,7 @@ describe("WorkerService", () => {
 
     it("should reject new workers when shutdown", async () => {
       await workerService.shutdown();
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       await expect(
         workerService.runWorker(handler, { test: "data" })
       ).rejects.toThrow("WorkerService is shutdown");
@@ -168,7 +168,7 @@ describe("WorkerService", () => {
 
   describe("Concurrency Control", () => {
     it("should respect maxConcurrentWorkers", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const promises = [
         workerService.runWorker(handler, { id: 1 }),
         workerService.runWorker(handler, { id: 2 }),
@@ -200,7 +200,7 @@ describe("WorkerService", () => {
     }, 10000);
 
     it("should track active workers count", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const promise = workerService.runWorker(handler, { test: "data" });
 
       // Wait a bit for the Worker to be created
@@ -230,7 +230,7 @@ describe("WorkerService", () => {
     });
 
     it("should wait for active workers to complete", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const workerPromise = workerService.runWorker(handler, { test: "data" });
 
       // Wait a bit for the Worker to be created
@@ -255,7 +255,7 @@ describe("WorkerService", () => {
       });
 
       // Create an active worker so that waitForWorkersCompletion doesn't resolve immediately
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const workerPromise = testWorkerService.runWorker(handler, {
         test: "data",
       });
@@ -294,14 +294,14 @@ describe("WorkerService", () => {
 
   describe("Abort and Cleanup", () => {
     it("should abort all active workers", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       // Use much larger timeout to prevent workers from being finalized by timeout
-      const worker1 = workerService.runWorker(
+      workerService.runWorker(
         handler,
         { test: "data1" },
         { workerTimeout: 60000 }
       );
-      const worker2 = workerService.runWorker(
+      workerService.runWorker(
         handler,
         { test: "data2" },
         { workerTimeout: 60000 }
@@ -323,7 +323,7 @@ describe("WorkerService", () => {
 
   describe("Wait for Completion", () => {
     it("should wait for all workers to complete", async () => {
-      const handler = async (data: any) => ({ result: "test" });
+      const handler = async (_data: any) => ({ result: "test" });
       const workerPromise = workerService.runWorker(handler, { test: "data" });
 
       // Wait a bit for the Worker to be created
